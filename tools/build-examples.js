@@ -21,15 +21,24 @@ const arg = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] :
 // --dir: the examples directory to link (default: the ERC assets). The Sepolia run copies the assets'
 // examples under deployments/ and relinks them with the real chain, registries and accounts:
 //   --chain-id 11155111 --spec-registry 0x.. --binding-registry 0x.. --publisher 0x.. --map placeholder=real,...
+// The examples are authored for Sepolia (chain 11155111). When --chain-id names another chain (an Anvil
+// rehearsal, say), every `eip155:11155111:` account reference and `eip155:11155111/` asset reference in
+// the documents is rewritten to that chain before linking, so that the keys match the on-chain derivation.
+// --from-chain-id overrides the source chain if the examples were authored for another one.
 const EX = path.resolve(arg('--dir', path.join(ROOT, 'assets', 'erc-asf', 'examples')));
 const BINDING_REGISTRY = (arg('--binding-registry', '0x00000000000000000000000000000000000a5f02')).toLowerCase();
 const CHAIN_ID = arg('--chain-id', null);
+const FROM_CHAIN_ID = arg('--from-chain-id', '11155111');
 const SPEC_REGISTRY = arg('--spec-registry', null);
 const PUBLISHER = arg('--publisher', null);
 const MAP = (arg('--map', '') || '').split(',').filter(Boolean).map((kv) => kv.split('=').map((x) => x.trim().toLowerCase()));
 
 function readJson(p) {
   let text = fs.readFileSync(p, 'utf8');
+  if (CHAIN_ID && String(CHAIN_ID) !== String(FROM_CHAIN_ID)) {
+    text = text.split(`eip155:${FROM_CHAIN_ID}:`).join(`eip155:${CHAIN_ID}:`);
+    text = text.split(`eip155:${FROM_CHAIN_ID}/`).join(`eip155:${CHAIN_ID}/`);
+  }
   for (const [from, to] of MAP) text = text.split(from).join(to);
   const doc = JSON.parse(text);
   if (doc.kind === 'safety-specification' && doc.metadata && doc.metadata.registration) {
@@ -45,7 +54,7 @@ function writeJson(p, doc) { fs.writeFileSync(p, JSON.stringify(doc, null, 2) + 
 function listJson(dir) { return fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); }
 function addressOf(accountRef) { return '0x' + accountRef.split(':')[2].slice(2); }
 
-const manifest = { generatedBy: 'tools/build-examples.js', bindingRegistry: BINDING_REGISTRY, profiles: {}, specifications: {}, bindings: {}, requirements: {} };
+const manifest = { generatedBy: 'tools/build-examples.js', bindingRegistry: BINDING_REGISTRY, profiles: {}, specifications: {}, bindings: {}, requirements: {}, responses: {} };
 
 // ------------------------------------------------------------------------------------ profiles
 for (const f of listJson(path.join(EX, 'profiles'))) {
@@ -182,5 +191,24 @@ for (const f of listJson(path.join(EX, 'requirements'))) {
   writeJson(path.join(EX, 'requirements', f), doc);
 }
 
+// ----------------------------------------------------------------------------------- responses
+const RESTRICTION_BITS = C.RESTRICTION;
+if (fs.existsSync(path.join(EX, 'responses'))) {
+  for (const f of listJson(path.join(EX, 'responses'))) {
+    const doc = readJson(path.join(EX, 'responses', f));
+    const bits = doc.restrictions.reduce((acc, r) => {
+      if (!(r in RESTRICTION_BITS)) throw new Error(`${f}: unknown restriction ${r}`);
+      return acc | RESTRICTION_BITS[r];
+    }, 0);
+    if (doc.binding && doc.binding.example) {
+      const b = manifest.bindings[doc.binding.example];
+      if (!b) throw new Error(`${f}: unknown binding example ${doc.binding.example}`);
+      doc.binding.id = b.bindingId;
+      writeJson(path.join(EX, 'responses', f), doc);
+    }
+    manifest.responses[f] = { file: `responses/${f}`, restrictions: doc.restrictions, restrictionsBits: bits, responseRef: C.canonicalHash(doc) };
+  }
+}
+
 writeJson(path.join(EX, 'manifest.json'), manifest);
-console.log(`examples linked: ${Object.keys(manifest.profiles).length} profiles, ${Object.keys(manifest.specifications).length} specifications, ${Object.keys(manifest.bindings).length} bindings, ${Object.keys(manifest.requirements).length} requirement sets`);
+console.log(`examples linked: ${Object.keys(manifest.profiles).length} profiles, ${Object.keys(manifest.specifications).length} specifications, ${Object.keys(manifest.bindings).length} bindings, ${Object.keys(manifest.requirements).length} requirement sets, ${Object.keys(manifest.responses).length} responses`);

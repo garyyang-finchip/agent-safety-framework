@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the ethereum/ERCs filing package for the Agent Safety Framework.
+"""Build the ethereum/ERCs filing package for the Agent Safety and Security Framework.
 
 Usage:
     python3 scripts/make-filing-package.py [--number 9999] [--discussions-to URL] [--out ercs-pr-package]

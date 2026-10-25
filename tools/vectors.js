@@ -42,7 +42,7 @@ const identifiers = {
   familyIds: Object.fromEntries(C.FAMILIES.map((f) => [`asf:family:${f}`, C.idOf(`asf:family:${f}`)])),
   enforcementBits: C.ENFORCEMENT,
   rightsBits: C.RIGHTS,
-  restriction: C.RESTRICTION,
+  restrictionBits: C.RESTRICTION,
   combinator: C.COMBINATOR,
   bindingState: { none: 0, active: 1, suspended: 2, terminated: 3 },
   verdict: { unknown: 0, satisfied: 1, 'not-satisfied': 2 },
@@ -141,4 +141,5 @@ write('examples.json', {
   bindings: Object.fromEntries(Object.entries(manifest.bindings).map(([f, e]) => [f, { paramsHash: e.paramsHash, authorityRef: e.authorityRef, enforcement: e.enforcement, bindingId: e.bindingId, parentBindingId: e.parentBindingId }])),
   requirements: Object.fromEntries(Object.entries(manifest.requirements).map(([f, e]) => [f, { documentHash: e.documentHash, requirementId: e.requirementId }])),
   profiles: Object.fromEntries(Object.entries(manifest.profiles).map(([id, e]) => [id, { profileId: e.profileId, descriptorHash: e.descriptorHash }])),
+  responses: Object.fromEntries(Object.entries(manifest.responses || {}).map(([f, e]) => [f, { restrictionsBits: e.restrictionsBits, responseRef: e.responseRef }])),
 });

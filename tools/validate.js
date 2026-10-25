@@ -26,11 +26,13 @@ const byKind = {
   'safety-specification': 'safety-specification.schema.json',
   'safety-binding': 'safety-binding.schema.json',
   'requirement-set': 'requirement-set.schema.json',
+  'intervention-response': 'intervention-response.schema.json',
 };
 
 let failures = 0;
 let count = 0;
-for (const dir of ['profiles', 'specifications', 'bindings', 'requirements']) {
+for (const dir of ['profiles', 'specifications', 'bindings', 'requirements', 'responses']) {
+  if (!fs.existsSync(path.join(EX, dir))) continue;
   for (const f of fs.readdirSync(path.join(EX, dir)).filter((x) => x.endsWith('.json')).sort()) {
     const doc = JSON.parse(fs.readFileSync(path.join(EX, dir, f), 'utf8'));
     const schema = byKind[doc.kind];
@@ -62,6 +64,11 @@ for (const [f, e] of Object.entries(manifest.requirements)) {
   const doc = JSON.parse(fs.readFileSync(path.join(EX, e.file), 'utf8'));
   if (C.canonicalHash(doc) !== e.documentHash) { failures++; console.log(`FAIL manifest documentHash of ${f}`); }
   if (e.onChain && C.requirementId(e.onChain) !== e.requirementId) { failures++; console.log(`FAIL requirementId of ${f}`); }
+}
+
+for (const [f, e] of Object.entries(manifest.responses || {})) {
+  const doc = JSON.parse(fs.readFileSync(path.join(EX, e.file), 'utf8'));
+  if (C.canonicalHash(doc) !== e.responseRef) { failures++; console.log(`FAIL manifest responseRef of ${f}`); }
 }
 
 console.log(`validated ${count} example documents against ${Object.keys(byKind).length} schemas; manifest re-checked; ${failures} failure(s)`);

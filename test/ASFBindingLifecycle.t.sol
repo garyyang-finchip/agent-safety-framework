@@ -34,7 +34,8 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(b.enforcement, T.ENFORCED_ACCOUNT | T.ENFORCED_CONTRACT);
         assertEq(b.createdAt, uint64(block.timestamp));
         assertEq(uint8(b.state), uint8(T.BindingState.Active));
-        assertEq(uint8(b.restriction), uint8(T.Restriction.None));
+        assertEq(b.restrictions, 0);
+        assertEq(b.responseRef, bytes32(0));
         assertEq(b.depth, 0);
         // indexed under (subject, adopter) and (scope, adopter)
         assertEq(reg.countBySubject(subjectAgent, user), 1);
@@ -93,7 +94,7 @@ contract ASFBindingLifecycleTest is ASFBase {
         vm.expectRevert(ASFErrors.BindingExists.selector);
         reg.adopt(i);
         vm.prank(user);
-        reg.suspend(id, T.Restriction.FullStop, bytes32(0));
+        reg.suspend(id, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
         vm.prank(user);
         vm.expectRevert(ASFErrors.BindingExists.selector);
         reg.adopt(i);
@@ -178,18 +179,20 @@ contract ASFBindingLifecycleTest is ASFBase {
         bytes32 id = adoptAs(user, input(keccak256("b")));
         vm.prank(user);
         vm.expectEmit(true, false, false, true, address(reg));
-        emit IASFBindingRegistry.BindingStateChanged(id, T.BindingState.Active, T.BindingState.Suspended, T.Restriction.NoNewRisk, user, keccak256("incident-1"));
-        reg.suspend(id, T.Restriction.NoNewRisk, keccak256("incident-1"));
+        emit IASFBindingRegistry.BindingStateChanged(id, T.BindingState.Active, T.BindingState.Suspended, T.RESTRICT_NO_NEW_RISK, keccak256("response-1"), user, keccak256("incident-1"));
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, keccak256("response-1"), keccak256("incident-1"));
         T.Binding memory b = reg.bindingOf(id);
         assertEq(uint8(b.state), uint8(T.BindingState.Suspended));
-        assertEq(uint8(b.restriction), uint8(T.Restriction.NoNewRisk));
+        assertEq(b.restrictions, T.RESTRICT_NO_NEW_RISK);
+        assertEq(b.responseRef, keccak256("response-1"));
 
         vm.warp(block.timestamp + 1 hours);
         vm.prank(user);
         reg.resume(id, keccak256("resolved"));
         b = reg.bindingOf(id);
         assertEq(uint8(b.state), uint8(T.BindingState.Active));
-        assertEq(uint8(b.restriction), uint8(T.Restriction.None), "resume clears the restriction");
+        assertEq(b.restrictions, 0, "resume clears the response requirements");
+        assertEq(b.responseRef, bytes32(0));
         assertEq(b.stateChangedAt, uint64(block.timestamp));
 
         vm.prank(user);
@@ -201,18 +204,27 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(reg.countBySubject(subjectAgent, user), 1);
     }
 
-    function test_N14_suspend_requires_a_named_restriction() public {
+    function test_N14_suspend_requires_a_non_empty_in_range_response_set() public {
         bytes32 id = adoptAs(user, input(keccak256("b")));
         vm.prank(user);
         vm.expectRevert(ASFErrors.InvalidRestriction.selector);
-        reg.suspend(id, T.Restriction.None, bytes32(0));
+        reg.suspend(id, 0, bytes32(0), bytes32(0));
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.InvalidRestriction.selector);
+        reg.suspend(id, 32, bytes32(0), bytes32(0));
+        // several response requirements combine in one suspension
+        vm.prank(user);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY | T.RESTRICT_ESSENTIAL_ONLY, keccak256("resp"), bytes32(0));
+        T.Binding memory b = reg.bindingOf(id);
+        assertEq(b.restrictions, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY | T.RESTRICT_ESSENTIAL_ONLY);
+        assertEq(b.responseRef, keccak256("resp"));
     }
 
     function test_N15_strangers_cannot_transition() public {
         bytes32 id = adoptAs(user, input(keccak256("b")));
         vm.startPrank(rando);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
-        reg.suspend(id, T.Restriction.FullStop, bytes32(0));
+        reg.suspend(id, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
         reg.terminate(id, bytes32(0));
         vm.expectRevert(ASFErrors.NotAdopter.selector);
@@ -227,7 +239,7 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(reg.rightsOf(id, guardian), T.RIGHT_SUSPEND);
         assertEq(reg.intervenersOf(id).length, 1);
         vm.prank(guardian);
-        reg.suspend(id, T.Restriction.DeriskOnly, keccak256("alert"));
+        reg.suspend(id, T.RESTRICT_DERISK_ONLY, bytes32(0), keccak256("alert"));
         // a suspend-only guardian can neither resume nor terminate
         vm.prank(guardian);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
@@ -246,12 +258,12 @@ contract ASFBindingLifecycleTest is ASFBase {
         vm.startPrank(user);
         vm.expectRevert(ASFErrors.InvalidState.selector);
         reg.resume(id, bytes32(0)); // not suspended
-        reg.suspend(id, T.Restriction.Shrink, bytes32(0));
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
         vm.expectRevert(ASFErrors.InvalidState.selector);
-        reg.suspend(id, T.Restriction.Shrink, bytes32(0)); // already suspended
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0)); // already suspended
         reg.terminate(id, bytes32(0));
         vm.expectRevert(ASFErrors.InvalidState.selector);
-        reg.suspend(id, T.Restriction.Shrink, bytes32(0));
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
         vm.expectRevert(ASFErrors.InvalidState.selector);
         reg.resume(id, bytes32(0));
         vm.expectRevert(ASFErrors.InvalidState.selector);
@@ -269,7 +281,7 @@ contract ASFBindingLifecycleTest is ASFBase {
         reg.intervenersOf(ghost);
         vm.prank(user);
         vm.expectRevert(ASFErrors.UnknownBinding.selector);
-        reg.suspend(ghost, T.Restriction.FullStop, bytes32(0));
+        reg.suspend(ghost, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
         assertEq(reg.rightsOf(ghost, user), 0);
     }
 
@@ -303,7 +315,7 @@ contract ASFBindingLifecycleTest is ASFBase {
     function test_N19_parent_must_be_active() public {
         bytes32 parent = adoptAs(user, input(keccak256("parent")));
         vm.prank(user);
-        reg.suspend(parent, T.Restriction.FullStop, bytes32(0));
+        reg.suspend(parent, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
         T.BindingInput memory c = input(keccak256("child"));
         c.parentBindingId = parent;
         vm.prank(agent);

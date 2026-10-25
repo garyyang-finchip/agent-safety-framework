@@ -64,7 +64,7 @@ contract ASFGuardedAccountTest is ASFBase {
         exec(abi.encodeCall(LendingDesk.placeOrder, ()));
         // the guardian suspends under DeriskOnly after an alert
         vm.prank(guardian);
-        reg.suspend(bindingId, T.Restriction.DeriskOnly, keccak256("alert: injected instruction detected"));
+        reg.suspend(bindingId, T.RESTRICT_DERISK_ONLY, bytes32(0), keccak256("alert: injected instruction detected"));
         // new exposure is blocked
         vm.prank(agent);
         vm.expectRevert(); // ASFGuardedAccount.BindingNotSatisfied(NotSatisfied, [Suspended])
@@ -79,10 +79,30 @@ contract ASFGuardedAccountTest is ASFBase {
         assertEq(desk.orders(address(acct)), 0);
     }
 
+    function test_N48_combined_response_requirements_keep_derisking_open_unless_full_stop_is_set() public {
+        exec(abi.encodeCall(LendingDesk.borrow, (100)));
+        // no new risk + derisk only: borrowing stops, repaying continues
+        vm.prank(guardian);
+        reg.suspend(bindingId, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY, keccak256("response"), bytes32(0));
+        vm.prank(agent);
+        vm.expectRevert();
+        acct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        exec(abi.encodeCall(LendingDesk.repay, (10)));
+        assertEq(desk.debt(address(acct)), 90);
+        // adding full stop to the same set closes the de-risking path as well
+        vm.prank(user);
+        reg.resume(bindingId, bytes32(0));
+        vm.prank(user);
+        reg.suspend(bindingId, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP, keccak256("response"), bytes32(0));
+        vm.prank(agent);
+        vm.expectRevert();
+        acct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+    }
+
     function test_N34_full_stop_blocks_even_derisking() public {
         exec(abi.encodeCall(LendingDesk.borrow, (100)));
         vm.prank(user);
-        reg.suspend(bindingId, T.Restriction.FullStop, bytes32(0));
+        reg.suspend(bindingId, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
         vm.prank(agent);
         vm.expectRevert();
         acct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
@@ -90,7 +110,7 @@ contract ASFGuardedAccountTest is ASFBase {
 
     function test_N35_resume_reopens_and_terminate_closes_for_good() public {
         vm.prank(user);
-        reg.suspend(bindingId, T.Restriction.NoNewRisk, bytes32(0));
+        reg.suspend(bindingId, T.RESTRICT_NO_NEW_RISK, bytes32(0), bytes32(0));
         vm.prank(agent);
         vm.expectRevert();
         acct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));

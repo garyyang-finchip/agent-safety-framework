@@ -114,7 +114,7 @@ contract ASFAdapter8414Test is ASFBase {
         uint256 id = mintWithAdapter(7 days);
         uint256 sid = submit(worker, id);
         vm.prank(worker);
-        reg.suspend(b, T.Restriction.FullStop, keccak256("self-reported incident"));
+        reg.suspend(b, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("self-reported incident"));
         (T.Verdict v, bytes32[] memory ids, T.Reason[] memory reasons) = adapter.evaluate(worker);
         assertVerdict(v, T.Verdict.NotSatisfied);
         assertEq(ids[0], b, "the explaining candidate is reported");

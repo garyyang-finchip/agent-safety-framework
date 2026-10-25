@@ -13,7 +13,7 @@ import {OperatorProbe, LendingDesk, IGuardedAccountLike} from "./helpers/Operato
 import {TaskToken} from "../test/fixtures/task-token/TaskToken.sol";
 import {ITaskTender} from "../test/fixtures/task-token/interfaces/ITaskTender.sol";
 
-/// @notice Evidence run of the Agent Safety Framework reference implementation (Sepolia, rehearsed on Anvil).
+/// @notice Evidence run of the Agent Safety and Security Framework reference implementation (Sepolia, rehearsed on Anvil).
 ///
 /// Three keys take part: PRIVATE_KEY (deployer; plays the principal, the specification publisher, the swarm
 /// organizer and the task publisher), AGENT_PK (the assistant / worker / swarm member A), GUARDIAN_PK (the
@@ -248,8 +248,14 @@ contract SepoliaEvidence is Script {
         vm.stopBroadcast();
         require(ok1, "borrow while active should pass");
 
+        string memory m = vm.readFile(_manifestPath());
         vm.startBroadcast(guardianPk);
-        reg.suspend(personal, T.Restriction.DeriskOnly, keccak256("alert: injected instruction detected"));
+        reg.suspend(
+            personal,
+            uint8(vm.parseJsonUint(m, '.responses["guardian-derisk-only.response.json"].restrictionsBits')),
+            vm.parseJsonBytes32(m, '.responses["guardian-derisk-only.response.json"].responseRef'),
+            keccak256("alert: injected instruction detected")
+        );
         vm.stopBroadcast();
 
         vm.startBroadcast(agentPk);
@@ -325,8 +331,14 @@ contract SepoliaEvidence is Script {
         bytes32 member = vm.parseJsonBytes32(s, ".bindingSwarmMemberA");
         bytes32 spec2 = vm.parseJsonBytes32(s, ".specIdSwarmSharedFunds");
 
+        string memory m = vm.readFile(_manifestPath());
         vm.startBroadcast(pk);
-        reg.suspend(personal, T.Restriction.FullStop, keccak256("maintenance"));
+        reg.suspend(
+            personal,
+            uint8(vm.parseJsonUint(m, '.responses["principal-full-stop.response.json"].restrictionsBits')),
+            vm.parseJsonBytes32(m, '.responses["principal-full-stop.response.json"].responseRef'),
+            keccak256("maintenance")
+        );
         vm.stopBroadcast();
         vm.startBroadcast(agentPk);
         (bool ok,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));

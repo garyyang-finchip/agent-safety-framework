@@ -28,7 +28,7 @@ contract ASFVectorsTest is ASFBase {
         assertEq(vm.parseJsonUint(j, ".enforcementBits.account"), T.ENFORCED_ACCOUNT);
         assertEq(vm.parseJsonUint(j, ".enforcementBits.collective"), T.ENFORCED_COLLECTIVE);
         assertEq(vm.parseJsonUint(j, ".rightsBits.terminate"), T.RIGHT_TERMINATE);
-        assertEq(vm.parseJsonUint(j, '.restriction["derisk-only"]'), uint8(T.Restriction.DeriskOnly));
+        assertEq(vm.parseJsonUint(j, '.restrictionBits["derisk-only"]'), T.RESTRICT_DERISK_ONLY);
         assertEq(vm.parseJsonUint(j, '.reason["spec-registry-unavailable"]'), uint8(T.Reason.SpecRegistryUnavailable));
         assertEq(vm.parseJsonUint(j, '.verdict["not-satisfied"]'), uint8(T.Verdict.NotSatisfied));
     }

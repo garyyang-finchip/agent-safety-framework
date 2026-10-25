@@ -12,10 +12,10 @@ import {ToggleSpecRegistry} from "./mocks/ToggleSpecRegistry.sol";
 contract ASFCheckTest is ASFBase {
     function test_satisfied_clause_reports_no_reason() public {
         bytes32 id = adoptAs(user, input(keccak256("b")));
-        (T.Verdict v, T.Reason r, T.Restriction x) = reg.checkBinding(id, clauseFor(user, subjectAgent, scopeWallet, 1));
+        (T.Verdict v, T.Reason r, uint8 x) = reg.checkBinding(id, clauseFor(user, subjectAgent, scopeWallet, 1));
         assertVerdict(v, T.Verdict.Satisfied);
         assertReason(r, T.Reason.None);
-        assertEq(uint8(x), uint8(T.Restriction.None));
+        assertEq(x, 0);
     }
 
     function test_N23_no_binding_supplied_or_unknown_id() public view {
@@ -30,11 +30,11 @@ contract ASFCheckTest is ASFBase {
     function test_N24_state_reasons_and_restriction_surface() public {
         bytes32 id = adoptAs(user, input(keccak256("b")));
         vm.prank(user);
-        reg.suspend(id, T.Restriction.DeriskOnly, bytes32(0));
-        (T.Verdict v, T.Reason r, T.Restriction x) = reg.checkBinding(id, clause());
+        reg.suspend(id, T.RESTRICT_DERISK_ONLY, bytes32(0), bytes32(0));
+        (T.Verdict v, T.Reason r, uint8 x) = reg.checkBinding(id, clause());
         assertVerdict(v, T.Verdict.NotSatisfied);
         assertReason(r, T.Reason.Suspended);
-        assertEq(uint8(x), uint8(T.Restriction.DeriskOnly), "consumers learn which restriction applies");
+        assertEq(x, T.RESTRICT_DERISK_ONLY, "consumers learn which response requirements apply");
         vm.prank(user);
         reg.terminate(id, bytes32(0));
         (v, r,) = reg.checkBinding(id, clause());
@@ -116,11 +116,11 @@ contract ASFCheckTest is ASFBase {
         bytes32 grandchild = adoptAs(rando, g);
 
         vm.prank(user);
-        reg.suspend(parent, T.Restriction.NoNewRisk, bytes32(0));
-        (T.Verdict v, T.Reason r, T.Restriction x) = reg.checkBinding(grandchild, clause());
+        reg.suspend(parent, T.RESTRICT_NO_NEW_RISK, bytes32(0), bytes32(0));
+        (T.Verdict v, T.Reason r, uint8 x) = reg.checkBinding(grandchild, clause());
         assertVerdict(v, T.Verdict.NotSatisfied);
         assertReason(r, T.Reason.ParentNotSatisfied);
-        assertEq(uint8(x), uint8(T.Restriction.NoNewRisk), "the ancestor's restriction is surfaced");
+        assertEq(x, T.RESTRICT_NO_NEW_RISK, "the ancestor's response requirements are surfaced");
         (, r,) = reg.checkBinding(child, clause());
         assertReason(r, T.Reason.ParentNotSatisfied);
 
@@ -197,7 +197,7 @@ contract ASFCheckTest is ASFBase {
         bytes32 b = adoptAs(user, input(keccak256("b")));
         bytes32 c = adoptAs(user, input(keccak256("c")));
         vm.prank(user);
-        reg.suspend(c, T.Restriction.FullStop, bytes32(0));
+        reg.suspend(c, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
 
         T.RequirementSet memory r;
         r.clauses = new T.Clause[](3);
