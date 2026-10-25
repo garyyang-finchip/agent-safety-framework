@@ -1,0 +1,25 @@
+{
+  "name": "agent-safety-framework",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Agent Safety Framework (ASF): reference implementation, schemas, vectors and tools",
+  "license": "CC0-1.0",
+  "type": "commonjs",
+  "scripts": {
+    "build:examples": "node tools/build-examples.js",
+    "vectors": "node tools/vectors.js",
+    "validate": "node tools/validate.js",
+    "lint:erc": "node tools/lint-erc.js",
+    "test:tools": "node --test tools/test/*.test.js",
+    "check": "npm run build:examples && npm run vectors && npm run validate && npm run test:tools"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "canonicalize": "^2.1.0",
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "eipw-lint-js": "0.11.0"
+  }
+}
