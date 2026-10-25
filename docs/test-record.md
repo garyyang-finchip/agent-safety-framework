@@ -1,6 +1,6 @@
 # Test record
 
-`forge test`: 82 tests, 0 failures (solc 0.8.30, optimizer 200 runs, no via-IR). 56 of them are negative conformance scenarios, numbered N01–N56 in the test names (N49–N56 were added in revision 3 for the findings of the first public review: response sets over derivation chains, required interveners, and the rule that an intervener's suspension is not the adopter's to lift). Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
+`forge test`: 84 tests, 0 failures (solc 0.8.30, optimizer 200 runs, no via-IR). 58 of them are negative conformance scenarios, numbered N01–N58 in the test names (N49–N56 were added in revision 3 for the findings of the first public review: response sets over derivation chains, required interveners, and the rule that an intervener's suspension is not the adopter's to lift; N57–N58 in revision 4 for the closed resume right, after the second review). Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
 
 ## Group 1 — Safety Specification registry (`test/ASFSpecificationRegistry.t.sol`)
 
@@ -56,7 +56,8 @@
 - `test_N31_combinators`
 - `test_N32_unknown_counts_toward_neither_side_in_KOf`
 - `test_N50_response_sets_in_force_are_the_union_of_the_chain_and_empty_when_the_chain_is_broken` (root set reaches a grandchild; child and root sets unite; a full stop anywhere is in the union; a terminated or expired record empties it)
-- `test_N51_required_interveners_must_be_named_with_at_least_the_required_rights` (named account, rights subset, the adopter never counts, zero-account wildcard, several required interveners, malformed rights revert)
+- `test_N51_required_interveners_must_be_named_with_at_least_the_required_rights` (named account, rights subset, the adopter never counts, a zero account is a malformed requirement, several required interveners, malformed rights revert)
+- `test_N57_a_clause_that_names_interveners_closes_the_resume_right` (an unnamed holder of the resume right fails the clause; unnamed suspend-only or terminate-only interveners are allowed; a named account may hold more; the escalation shape with a named suspender and a named executor; no constraint without required interveners)
 - `test_satisfied_clause_reports_no_reason`
 - `test_subject_and_scope_keys_match_the_reference_derivation`
 
@@ -88,6 +89,7 @@
 - `test_N47_template_may_not_pre_bind_adopter_or_subject`
 - `test_N55_a_fulfiller_whose_binding_does_not_name_the_required_intervener_is_rejected` (clause requires the task publisher with the suspend right: a binding under the fulfiller's sole control is rejected with `IntervenerMismatch`, one naming the publisher is accepted)
 - `test_N56_the_publishers_suspension_is_not_the_fulfillers_to_lift_before_judgment` (the fulfiller's resume reverts; judgment rejects; a fresh binding naming the publisher is admitted and can be suspended again)
+- `test_N58_a_fulfiller_cannot_keep_a_resume_key_of_its_own_beside_the_required_intervener` (the puppet-key binding is rejected with `IntervenerMismatch` before any suspension; with a clause naming publisher and executor, the executor lifts the publisher's stop, the fulfiller cannot, and the fulfiller is then accepted)
 - `test_fulfiller_with_binding_is_accepted_and_paid_through_the_real_kernel`
 - `test_requirement_for_a_fulfiller_fills_adopter_and_subject`
 - `test_the_first_satisfying_binding_is_selected_among_several`
@@ -99,7 +101,7 @@
 - `test_identifier_hashes`
 - `test_interface_ids_match_the_vectors` (`IASFSpecificationRegistry` `0x9bddde77`, `IASFBindingRegistry` `0x1ff33bef`)
 - `test_keys_match_the_on_chain_derivation`
-- `test_requirement_id_matches_the_registry` (three clauses, the third with a named and a wildcard required intervener)
+- `test_requirement_id_matches_the_registry` (three clauses, the third with two required interveners: a suspender and a resume holder)
 - `test_spec_and_binding_ids_follow_the_abi_encoding`
 
 ## Anvil rehearsal of the evidence script
