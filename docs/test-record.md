@@ -1,6 +1,6 @@
 # Test record
 
-`forge test`: 74 tests, 0 failures (solc 0.8.30, optimizer 200 runs, no via-IR). 48 of them are negative conformance scenarios, numbered N01–N48 in the test names. Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
+`forge test`: 82 tests, 0 failures (solc 0.8.30, optimizer 200 runs, no via-IR). 56 of them are negative conformance scenarios, numbered N01–N56 in the test names (N49–N56 were added in revision 3 for the findings of the first public review: response sets over derivation chains, required interveners, and the rule that an intervener's suspension is not the adopter's to lift). Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
 
 ## Group 1 — Safety Specification registry (`test/ASFSpecificationRegistry.t.sol`)
 
@@ -27,13 +27,14 @@
 - `test_N13_intervener_rules`
 - `test_N14_suspend_requires_a_non_empty_in_range_response_set`
 - `test_N15_strangers_cannot_transition`
-- `test_N16_intervener_rights_are_exactly_the_granted_ones`
+- `test_N16_intervener_rights_are_exactly_the_granted_ones` (a suspend-only guardian can neither resume nor terminate; the adopter cannot lift the guardian's suspension and can only terminate; `suspendedBy` recorded and cleared)
 - `test_N17_invalid_transitions_revert`
 - `test_N18_unknown_binding_reverts`
 - `test_N19_parent_must_be_active`
 - `test_N20_parent_must_pin_the_same_specification_version`
 - `test_N21_child_window_cannot_exceed_the_parent`
 - `test_N22_depth_is_bounded`
+- `test_N49_an_interveners_suspension_is_lifted_only_by_an_intervener_holding_the_right` (guardian suspends: adopter cannot resume, executor with the right can; the adopter's own suspension is lifted by the adopter or by an intervener with the right; the executor's suspension cannot be lifted by the adopter or a suspend-only guardian)
 - `test_adopter_is_msg_sender_and_record_is_complete`
 - `test_backdated_validFrom_is_recorded_but_adoption_starts_at_creation`
 - `test_derived_binding_pins_the_same_version_and_inherits_depth`
@@ -47,13 +48,15 @@
 - `test_N23_no_binding_supplied_or_unknown_id`
 - `test_N24_state_reasons_and_restriction_surface` (the response set is returned with `Suspended`)
 - `test_N25_time_window_is_half_open`
-- `test_N26_clause_mismatches_in_evaluation_order`
+- `test_N26_clause_mismatches_in_evaluation_order` (`IntervenerMismatch` is evaluated after `EnforcementMismatch` and before the ancestor walk)
 - `test_N27_a_new_specification_version_never_upgrades_a_binding`
 - `test_N28_ancestor_failure_propagates_to_derived_bindings` (the ancestor's response set is reported with `ParentNotSatisfied`)
 - `test_N29_unknown_when_the_specification_registry_is_unavailable`
 - `test_N30_requirement_validation`
 - `test_N31_combinators`
 - `test_N32_unknown_counts_toward_neither_side_in_KOf`
+- `test_N50_response_sets_in_force_are_the_union_of_the_chain_and_empty_when_the_chain_is_broken` (root set reaches a grandchild; child and root sets unite; a full stop anywhere is in the union; a terminated or expired record empties it)
+- `test_N51_required_interveners_must_be_named_with_at_least_the_required_rights` (named account, rights subset, the adopter never counts, zero-account wildcard, several required interveners, malformed rights revert)
 - `test_satisfied_clause_reports_no_reason`
 - `test_subject_and_scope_keys_match_the_reference_derivation`
 
@@ -61,13 +64,16 @@
 
 - `test_N33_suspension_blocks_new_exposure_and_derisk_only_keeps_unwinding_open`
 - `test_N34_full_stop_blocks_even_derisking`
-- `test_N35_resume_reopens_and_terminate_closes_for_good`
+- `test_N35_resume_reopens_and_terminate_closes_for_good` (the principal cannot lift the guardian's suspension; the guardian, holding the resume right, does)
 - `test_N36_expiry_closes_the_path_without_any_transaction`
 - `test_N37_a_third_partys_binding_does_not_satisfy_the_principals_requirement`
 - `test_N38_weaker_enforcement_declaration_is_refused`
 - `test_N39_only_the_operator_executes_and_only_the_owner_configures`
 - `test_N40_malformed_requirement_cannot_be_deployed`
 - `test_N48_combined_response_requirements_keep_derisking_open_unless_full_stop_is_set` (`RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY`: borrow refused, repay passes; `RESTRICT_DERISK_ONLY | RESTRICT_FULL_STOP`: repay refused as well)
+- `test_N52_a_parents_derisk_only_suspension_keeps_the_derived_bindings_unwinding_open` (the account requires the agent's binding derived from the principal's root; a de-risk-only suspension of the root blocks borrow and keeps repay and cancel open although the derived record carries no set; the guardian's resume reopens)
+- `test_N53_a_parents_full_stop_or_termination_closes_the_derived_bindings_derisking_path` (full stop on the root closes repay; termination reports `ParentNotSatisfied` with an empty set and closes everything)
+- `test_N54_sets_of_the_child_and_of_the_parent_combine_and_full_stop_dominates`
 - `test_operator_acts_while_the_binding_is_satisfied`
 - `test_requirement_is_fixed_at_deployment`
 
@@ -80,6 +86,8 @@
 - `test_N45_unknown_verdict_does_nothing_and_the_task_clock_governs`
 - `test_N46_adapter_requires_the_authority_and_a_pending_judged_submission`
 - `test_N47_template_may_not_pre_bind_adopter_or_subject`
+- `test_N55_a_fulfiller_whose_binding_does_not_name_the_required_intervener_is_rejected` (clause requires the task publisher with the suspend right: a binding under the fulfiller's sole control is rejected with `IntervenerMismatch`, one naming the publisher is accepted)
+- `test_N56_the_publishers_suspension_is_not_the_fulfillers_to_lift_before_judgment` (the fulfiller's resume reverts; judgment rejects; a fresh binding naming the publisher is admitted and can be suspended again)
 - `test_fulfiller_with_binding_is_accepted_and_paid_through_the_real_kernel`
 - `test_requirement_for_a_fulfiller_fills_adopter_and_subject`
 - `test_the_first_satisfying_binding_is_selected_among_several`
@@ -89,11 +97,11 @@
 
 - `test_canonicalization_vector`
 - `test_identifier_hashes`
-- `test_interface_ids_match_the_vectors` (`IASFSpecificationRegistry` `0x9bddde77`, `IASFBindingRegistry` `0xb99bdc2a`)
+- `test_interface_ids_match_the_vectors` (`IASFSpecificationRegistry` `0x9bddde77`, `IASFBindingRegistry` `0x1ff33bef`)
 - `test_keys_match_the_on_chain_derivation`
-- `test_requirement_id_matches_the_registry`
+- `test_requirement_id_matches_the_registry` (three clauses, the third with a named and a wildcard required intervener)
 - `test_spec_and_binding_ids_follow_the_abi_encoding`
 
 ## Anvil rehearsal of the evidence script
 
-`script/SepoliaEvidence.s.sol` was run end to end on a local Anvil chain with three keys: deployCore (12 transactions), publishAndAdopt (7), guardLoop (6), tenderLoop (6), lifecycle (5) — 36 transactions, with the response sets and response references read from the relinked `manifest.json`. Observed: borrow ok; the guardian suspends with `RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY` (bits 9) and the `responseRef` of `guardian-derisk-only.response.json`; borrow refused (probe event with revert data); repay ok; resume; borrow ok; tender accepted and the bound worker paid 0.001 ETH through the real `acceptFulfillment`, the unbound submission rejected; the principal's `RESTRICT_FULL_STOP` suspension (bits 16, `principal-full-stop.response.json`) refused repay; charter terminated and the derived member binding reported `ParentNotSatisfied` while its own record stayed `Active`; swarm specification v1 deprecated with the binding unaffected.
+`script/SepoliaEvidence.s.sol` was run end to end on a local Anvil chain with three keys: deployCore (12 transactions), publishAndAdopt (7), guardLoop (6), tenderLoop (6), lifecycle (5) — 36 transactions, with the response sets, response references and interveners read from the relinked `manifest.json`. Observed: borrow ok; the guardian suspends with `RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY` (bits 9) and the `responseRef` of `guardian-derisk-only.response.json`; borrow refused (probe event with revert data); repay ok; the guardian resumes; borrow ok; the tender's template requires the deployer as an intervener with the suspend right and the worker's binding names it; tender accepted and the bound worker paid 0.001 ETH through the real `acceptFulfillment`, the unbound submission rejected; the principal's `RESTRICT_FULL_STOP` suspension (bits 16, `principal-full-stop.response.json`) refused repay; charter terminated and the derived member binding reported `ParentNotSatisfied` while its own record stayed `Active`; swarm specification v1 deprecated with the binding unaffected.

@@ -24,7 +24,7 @@
       "file": "profiles/governance-intervention.json",
       "family": "governance-accountability",
       "profileId": "0x983ee76569373430ab86b01469d70568e95741b6d65f7f6ada9cf5354d0ec411",
-      "descriptorHash": "0xb450e3fd9c96b4ed96f4bf0ef8a512fe9ad865405676e5dc66ee779b00580692"
+      "descriptorHash": "0xf37a3754eaeb010978d425c2790c255fe5854d0bd5af62a3eb1f06ab0512de4e"
     },
     "asf:profile:information/untrusted-input@1": {
       "file": "profiles/information-untrusted-input.json",
@@ -102,7 +102,7 @@
         "version": 1,
         "contentHash": "0xe418a676cfab27ff1e420cd6d3d44a6fda446628bbfefd9a2becb5d9f73fd432"
       },
-      "paramsHash": "0x43a92416bf2f1c73fecec8414212990693c6f184f3f40202defbe22ea974f566",
+      "paramsHash": "0xe32c7525c4dd8d1fed7a1afbc30a0f2d87d5c296003e5476b3f5b4d7dee883a7",
       "authorityRef": "0x25c253dca062b324dad1dc6e9ac265fc7ed4478f8255cbfa342f8a12eb37886e",
       "enforcement": 18,
       "enforcementLocations": [
@@ -115,9 +115,10 @@
       "interveners": [
         {
           "account": "0x0000000000000000000000000000000000006a2d",
-          "rights": 1
+          "rights": 3
         }
       ],
+      "intervenerCount": 1,
       "salt": "0x0000000000000000000000000000000000000000000000000000000000000011",
       "bindingId": "0x17fff4e549c63902b0051a8c87cda260164337ca5c82d876bb5f5fe218d3ff3f"
     },
@@ -149,6 +150,7 @@
           "rights": 7
         }
       ],
+      "intervenerCount": 1,
       "salt": "0x0000000000000000000000000000000000000000000000000000000000000021",
       "bindingId": "0x118fa978c4f4d42f9b1ab112aa01f382d8a2cd74aea40b0efc6c4804ba1db895"
     },
@@ -164,7 +166,7 @@
         "version": 1,
         "contentHash": "0xe418a676cfab27ff1e420cd6d3d44a6fda446628bbfefd9a2becb5d9f73fd432"
       },
-      "paramsHash": "0xf1c7affd90c6321f98b880b164ffa793c7202faba5c21b85706ace959b18c401",
+      "paramsHash": "0xa3ef566acea60acf056d46051c89cd2162d8910cb843a5f8d97a94295393e239",
       "authorityRef": "0xf2ffa8a8e45408895b937e3b11fb04f483236cd0cd7e71e652e6c8d6d36a137b",
       "enforcement": 2,
       "enforcementLocations": [
@@ -173,7 +175,13 @@
       "validFrom": 0,
       "validUntil": 0,
       "parentBindingId": "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "interveners": [],
+      "interveners": [
+        {
+          "account": "0x00000000000000000000000000000000000a11ce",
+          "rights": 1
+        }
+      ],
+      "intervenerCount": 1,
       "salt": "0x0000000000000000000000000000000000000000000000000000000000000041",
       "bindingId": "0x0ce9a993e9d3719752d4d7d818c4303e4d666b8bc1448e18a999a87b892e83e7"
     },
@@ -205,6 +213,7 @@
           "rights": 7
         }
       ],
+      "intervenerCount": 1,
       "salt": "0x0000000000000000000000000000000000000000000000000000000000000031",
       "bindingId": "0x546a02b67f089035679abc295537cc76c3e72b094a71929515716280a461d8e9"
     }
@@ -227,7 +236,8 @@
             "adopter": "0x00000000000000000000000000000000000060a9",
             "subjectKey": "0x009877fda26d47f7d13d6c9ded954b9dbd29e7cf34cc8ff23cc2f015d193c272",
             "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
-            "enforcement": 48
+            "enforcement": 48,
+            "interveners": []
           },
           {
             "specRegistry": "0x00000000000000000000000000000000000a5f01",
@@ -238,7 +248,8 @@
             "adopter": "0x00000000000000000000000000000000000000aa",
             "subjectKey": "0x8a1716e0a2393915e72e3435a262e1f681d2e38303ff7ac29ef5e054035e1ac3",
             "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
-            "enforcement": 18
+            "enforcement": 18,
+            "interveners": []
           },
           {
             "specRegistry": "0x00000000000000000000000000000000000a5f01",
@@ -249,7 +260,8 @@
             "adopter": "0x00000000000000000000000000000000000000bb",
             "subjectKey": "0x6fdd0374e3d1657c0eeeeb1f51fe6f5f7b79cd937b27490d0e315434c34edfa8",
             "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
-            "enforcement": 18
+            "enforcement": 18,
+            "interveners": []
           },
           {
             "specRegistry": "0x00000000000000000000000000000000000a5f01",
@@ -260,15 +272,16 @@
             "adopter": "0x00000000000000000000000000000000000000cc",
             "subjectKey": "0x7ea8a2785d5a551ce1d12aa2493b8d23ae9c47ea777d3a003e275252c21e3ada",
             "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
-            "enforcement": 18
+            "enforcement": 18,
+            "interveners": []
           }
         ]
       },
-      "requirementId": "0xd12fbc1302c75f4271a89ee0c4494c29403bd54123ddfa65625ca12d5e4dac47"
+      "requirementId": "0xc32c3f461b38b1fd374328cd992203278a35cf18bfcda0cf15f84ffa5079f673"
     },
     "tender-admission.requirement.json": {
       "file": "requirements/tender-admission.requirement.json",
-      "documentHash": "0x0b796d657f9958a20b03870e8736cc83f10aef742c829dc7c02f965a7d361a67",
+      "documentHash": "0xc2c48fa2e8e9eda979740e343a23770b37acb27636d6ebd658e59d0317238119",
       "concrete": false,
       "onChain": null,
       "requirementId": null

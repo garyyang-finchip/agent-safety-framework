@@ -4,7 +4,7 @@ The evidence run exercises the whole framework on Sepolia with the worked exampl
 
 - **Deployer** (`PRIVATE_KEY`): deploys everything, plays the specification publisher, the principal of the guarded account, the swarm organizer and the task publisher; funds the two other keys; pays most gas.
 - **Agent** (`AGENT_PK`): the assistant operating the guarded account (through the operator probe), swarm member A, and the worker who fulfills the tender. Receives 0.004 ETH from the deployer in phase 1.
-- **Guardian** (`GUARDIAN_PK`): may suspend the principal's binding; also submits to the tender as the unbound account. Receives 0.002 ETH in phase 1.
+- **Guardian** (`GUARDIAN_PK`): may suspend and resume the principal's binding (the example names it with both rights, because a suspension it records cannot be lifted by the principal); also submits to the tender as the unbound account. Receives 0.002 ETH in phase 1.
 
 Prerequisites: Foundry, Node 22, `npm install`, a Sepolia RPC URL, the deployer funded with at least 0.05 Sepolia ETH. Take every gas limit from live estimates: Sepolia's current schedule costs several times Anvil's.
 
@@ -26,7 +26,7 @@ mkdir -p deployments/sepolia && echo '{}' > deployments/sepolia.json
 forge script script/SepoliaEvidence.s.sol --sig "deployCore()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-Deploys `ASFSpecificationRegistry`, `ASFBindingRegistry`, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). Writes `deployments/sepolia.json`.
+Deploys `ASFSpecificationRegistry`, `ASFBindingRegistry`, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend right. Writes `deployments/sepolia.json`.
 
 ## Phase 2: relink the examples with the real addresses
 
@@ -49,7 +49,7 @@ Commit and push `deployments/sepolia/examples` before phase 3 so that `LOCATOR_B
 forge script script/SepoliaEvidence.s.sol --sig "publishAndAdopt()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-Publishes the two specifications (the script checks that the on-chain `specId` equals the manifest's), creates the principal's binding for the agent on the guarded account (guardian may suspend) and presents it to the account, the organizer's binding for the swarm, the agent's derived member binding, and the agent's own worker binding. Binding identifiers are written to the deployments file.
+Publishes the two specifications (the script checks that the on-chain `specId` equals the manifest's), creates the principal's binding for the agent on the guarded account (guardian may suspend and resume) and presents it to the account, the organizer's binding for the swarm, the agent's derived member binding, and the agent's own worker binding (which names the deployer as an intervener with the suspend right, as the tender requires). Interveners are read from the relinked manifest. Binding identifiers are written to the deployments file.
 
 ## Phase 4: guard loop
 
@@ -57,7 +57,7 @@ Publishes the two specifications (the script checks that the on-chain `specId` e
 forge script script/SepoliaEvidence.s.sol --sig "guardLoop()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-borrow (ok) -> guardian suspends with the response set of `guardian-derisk-only.response.json` (`RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY`, bits 9) and its `responseRef` -> borrow refused (recorded by the probe's `Attempt` event with the revert data) -> repay ok -> principal resumes -> borrow ok. The bits and the response reference are read from the relinked `manifest.json`.
+borrow (ok) -> guardian suspends with the response set of `guardian-derisk-only.response.json` (`RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY`, bits 9) and its `responseRef` -> borrow refused (recorded by the probe's `Attempt` event with the revert data) -> repay ok -> guardian resumes (the principal could not: the suspension was the guardian's) -> borrow ok. The bits and the response reference are read from the relinked `manifest.json`.
 
 ## Phase 5: tender loop
 
