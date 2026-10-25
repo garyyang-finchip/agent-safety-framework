@@ -298,4 +298,67 @@ contract ASFAdapter8414Test is ASFBase {
         (T.Verdict v3,,) = a.evaluate(worker);
         assertVerdict(v3, T.Verdict.NotSatisfied);
     }
+
+    function test_N58_a_fulfiller_cannot_keep_a_resume_key_of_its_own_beside_the_required_intervener() public {
+        ASFTaskTenderAdapter a = adapterRequiringPublisher();
+        // the fulfiller names the publisher with the suspend right, as required, and adds an address it controls
+        // with the resume right: with it the publisher's suspension would be lifted in the next block
+        address puppetKey = address(0xD011);
+        T.BindingInput memory i = input(keccak256("w"));
+        i.subjectKey = ASFKeys.accountSubjectKey(worker);
+        i.scopeKey = ASFKeys.refScopeKey("task-tenders");
+        i.enforcement = T.ENFORCED_ACCOUNT;
+        i.interveners = new T.Intervener[](2);
+        i.interveners[0] = T.Intervener({account: taskPublisher, rights: T.RIGHT_SUSPEND});
+        i.interveners[1] = T.Intervener({account: puppetKey, rights: T.RIGHT_RESUME});
+        bytes32 b = adoptAs(worker, i);
+        uint256 id = task.mintTask(owner, taskPublisher, address(a), TD, TH, "ipfs://task-v1", terms(7 days));
+        vm.prank(funder);
+        task.fundTask{value: 2 ether}(id, 2 ether);
+        uint256 sid = submit(worker, id);
+        // the binding is refused before any suspension happens: an unnamed holder of the resume right
+        (T.Verdict v, bytes32[] memory ids, T.Reason[] memory reasons) = a.evaluate(worker);
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertEq(ids[0], b);
+        assertReason(reasons[0], T.Reason.IntervenerMismatch);
+        a.judge(id, sid);
+        assertEq(uint8(task.submissionOf(id, sid).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+
+        // the escalation shape the tender can choose: name the publisher (suspend) and an executor (resume); the
+        // fulfiller's binding then grants exactly those, the publisher's stop is lifted by the executor and nobody else
+        address executor = address(0xE8EC);
+        T.Clause memory c = clause();
+        c.versions = new uint32[](1);
+        c.versions[0] = 1;
+        c.enforcement = T.ENFORCED_ACCOUNT;
+        c.interveners = new T.Intervener[](2);
+        c.interveners[0] = T.Intervener({account: taskPublisher, rights: T.RIGHT_SUSPEND});
+        c.interveners[1] = T.Intervener({account: executor, rights: T.RIGHT_RESUME});
+        ASFTaskTenderAdapter esc = new ASFTaskTenderAdapter(reg, ITaskTenderKernel(address(task)), one(c));
+        i = input(keccak256("w2"));
+        i.subjectKey = ASFKeys.accountSubjectKey(worker2);
+        i.scopeKey = ASFKeys.refScopeKey("task-tenders");
+        i.enforcement = T.ENFORCED_ACCOUNT;
+        i.interveners = new T.Intervener[](2);
+        i.interveners[0] = T.Intervener({account: taskPublisher, rights: T.RIGHT_SUSPEND});
+        i.interveners[1] = T.Intervener({account: executor, rights: T.RIGHT_RESUME});
+        bytes32 b2 = adoptAs(worker2, i);
+        uint256 id2 = task.mintTask(owner, taskPublisher, address(esc), TD, TH, "ipfs://task-v2", terms(7 days));
+        vm.prank(funder);
+        task.fundTask{value: 2 ether}(id2, 2 ether);
+        uint256 sid2 = submit(worker2, id2);
+        vm.prank(taskPublisher);
+        reg.suspend(b2, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        vm.prank(worker2);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(b2, bytes32(0));
+        (T.Verdict v2,,) = esc.evaluate(worker2);
+        assertVerdict(v2, T.Verdict.NotSatisfied);
+        vm.prank(executor);
+        reg.resume(b2, keccak256("report dismissed"));
+        (T.Verdict v3,,) = esc.evaluate(worker2);
+        assertVerdict(v3, T.Verdict.Satisfied);
+        esc.judge(id2, sid2);
+        assertEq(uint8(task.submissionOf(id2, sid2).status), uint8(ITaskTender.SubmissionStatus.Accepted));
+    }
 }

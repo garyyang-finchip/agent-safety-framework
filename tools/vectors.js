@@ -60,6 +60,7 @@ const CHAIN = 11155111;
 const agent = '0x000000000000000000000000000000000000a6e7';
 const principal = '0x00000000000000000000000000000000000a11ce';
 const guardian = '0x0000000000000000000000000000000000006a2d';
+const executor = '0x0000000000000000000000000000000000ac0df0';
 const accountRef = C.accountRef(CHAIN, agent);
 const scopeObj = { ref: C.accountRef(CHAIN, principal) };
 const richScope = { task: 'x:task-tender:eip155:11155111:0x0000000000000000000000000000000000007a5c:17', phase: 'execution' };
@@ -127,7 +128,7 @@ const requirement = {
     { specRegistry, specId, versions: [1], adopter: '0x' + '0'.repeat(40), subjectKey: '0x' + '0'.repeat(64), scopeKey: '0x' + '0'.repeat(64), enforcement: C.enforcementMask(['collective']),
       interveners: [
         { account: guardian, rights: C.rightsMask(['suspend']) },
-        { account: '0x' + '0'.repeat(40), rights: C.rightsMask(['suspend', 'resume']) },
+        { account: executor, rights: C.rightsMask(['resume']) },
       ] },
   ],
 };
@@ -140,7 +141,7 @@ write('requirement.json', {
   abiType: C.REQUIREMENT_TYPE,
   encoded: C.encodeRequirement(requirement),
   requirementId: C.requirementId(requirement),
-  note: 'requirementId = keccak256(abi.encode(requirement)); enumerations are encoded as uint8. A required intervener with the zero account stands for any intervener other than the adopter holding the rights.',
+  note: 'requirementId = keccak256(abi.encode(requirement)); enumerations are encoded as uint8. Required interveners are named accounts with the rights they must hold; a clause that names interveners also closes the resume right to the accounts it names.',
 });
 
 // ---------------------------------------------------------------------------- example hashes

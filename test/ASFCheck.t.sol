@@ -191,15 +191,11 @@ contract ASFCheckTest is ASFBase {
         (, r,) = reg.checkBinding(guarded, c);
         assertReason(r, T.Reason.IntervenerMismatch);
 
-        // the zero account stands for some intervener other than the adopter holding the rights
+        // a zero account is not a wildcard: it is a malformed requirement (independence from the adopter cannot
+        // be established by "some intervener", since the adopter chooses them all)
         c.interveners = requiring(address(0), T.RIGHT_SUSPEND);
-        (v,,) = reg.checkBinding(guarded, c);
-        assertVerdict(v, T.Verdict.Satisfied);
-        (, r,) = reg.checkBinding(plain, c);
-        assertReason(r, T.Reason.IntervenerMismatch);
-        c.interveners = requiring(address(0), T.RIGHT_TERMINATE);
-        (, r,) = reg.checkBinding(guarded, c);
-        assertReason(r, T.Reason.IntervenerMismatch);
+        vm.expectRevert(ASFErrors.InvalidRequirement.selector);
+        reg.checkBinding(guarded, c);
 
         // several required interveners: all must be present
         T.Intervener[] memory two = new T.Intervener[](2);
@@ -221,6 +217,57 @@ contract ASFCheckTest is ASFBase {
         c.interveners = requiring(guardian, 8);
         vm.expectRevert(ASFErrors.InvalidRequirement.selector);
         reg.requirementId(one(c));
+    }
+
+    function test_N57_a_clause_that_names_interveners_closes_the_resume_right() public {
+        T.Clause memory c = clause();
+        c.interveners = requiring(guardian, T.RIGHT_SUSPEND);
+
+        // the binding names the required guardian and, in addition, an account of the adopter's choosing with
+        // the resume right: that account could lift the guardian's suspension, so the clause is not met
+        T.Intervener[] memory iv = new T.Intervener[](2);
+        iv[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        iv[1] = T.Intervener({account: rando, rights: T.RIGHT_RESUME});
+        T.BindingInput memory i = input(keccak256("puppet"));
+        i.interveners = iv;
+        bytes32 puppet = adoptAs(user, i);
+        (T.Verdict v, T.Reason r,) = reg.checkBinding(puppet, c);
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(r, T.Reason.IntervenerMismatch);
+
+        // extra interveners without the resume right are allowed: they can only stop
+        iv[1] = T.Intervener({account: rando, rights: T.RIGHT_SUSPEND | T.RIGHT_TERMINATE});
+        i = input(keccak256("extra-stopper"));
+        i.interveners = iv;
+        (v,,) = reg.checkBinding(adoptAs(user, i), c);
+        assertVerdict(v, T.Verdict.Satisfied);
+
+        // a named account may hold more rights than required, resume included
+        bytes32 richer = adoptAs(user, withGuardian(input(keccak256("richer")), T.RIGHT_ALL));
+        (v,,) = reg.checkBinding(richer, c);
+        assertVerdict(v, T.Verdict.Satisfied);
+
+        // the escalation shape: the clause names the guardian (suspend) and an executor (resume); the binding
+        // grants exactly that, so the executor, and only the executor, can lift the guardian's stop
+        T.Intervener[] memory two = new T.Intervener[](2);
+        two[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        two[1] = T.Intervener({account: rando, rights: T.RIGHT_RESUME});
+        c.interveners = two;
+        (v,,) = reg.checkBinding(puppet, c);
+        assertVerdict(v, T.Verdict.Satisfied, "the same binding is fine once the clause names the resume holder");
+        vm.prank(guardian);
+        reg.suspend(puppet, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(puppet, bytes32(0));
+        vm.prank(rando);
+        reg.resume(puppet, bytes32(0));
+        (v,,) = reg.checkBinding(puppet, c);
+        assertVerdict(v, T.Verdict.Satisfied);
+
+        // a clause without required interveners does not constrain the resume right
+        (v,,) = reg.checkBinding(puppet, clause());
+        assertVerdict(v, T.Verdict.Satisfied);
     }
 
     function test_N27_a_new_specification_version_never_upgrades_a_binding() public {

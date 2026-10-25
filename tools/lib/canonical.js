@@ -49,8 +49,8 @@ function bindingId(chainId, registry, adopter, b) {
 const REQUIREMENT_TYPE = 'tuple(uint8 combinator,uint16 k,tuple(address specRegistry,bytes32 specId,uint32[] versions,address adopter,bytes32 subjectKey,bytes32 scopeKey,uint16 enforcement,tuple(address account,uint8 rights)[] interveners)[] clauses)';
 
 /** ABI encoding of a RequirementSet struct exactly as Solidity's abi.encode(requirement). A clause's
- *  `interveners` (required interveners: account or zero address for "any intervener other than the adopter",
- *  and the rights they must hold) defaults to the empty list. */
+ *  `interveners` (required interveners: named accounts and the rights they must hold; when present, no
+ *  unnamed account may hold the resume right on the binding) defaults to the empty list. */
 function encodeRequirement(req) {
   return AbiCoder.defaultAbiCoder().encode([REQUIREMENT_TYPE], [[
     req.combinator,
