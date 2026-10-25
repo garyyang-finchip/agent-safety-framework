@@ -1,6 +1,6 @@
 # Test record
 
-`forge test`: 73 tests, 0 failures (solc 0.8.30, optimizer 200 runs, no via-IR). 47 of them are negative conformance scenarios, numbered N01–N47 in the test names. Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 14 documents validated against 4 schemas, manifest re-checked, vectors regenerated.
+`forge test`: 74 tests, 0 failures (solc 0.8.30, optimizer 200 runs, no via-IR). 48 of them are negative conformance scenarios, numbered N01–N48 in the test names. Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
 
 ## Group 1 — Safety Specification registry (`test/ASFSpecificationRegistry.t.sol`)
 
@@ -25,7 +25,7 @@
 - `test_N11_no_re_creation_even_after_termination`
 - `test_N12_malformed_validity_reverts`
 - `test_N13_intervener_rules`
-- `test_N14_suspend_requires_a_named_restriction`
+- `test_N14_suspend_requires_a_non_empty_in_range_response_set`
 - `test_N15_strangers_cannot_transition`
 - `test_N16_intervener_rights_are_exactly_the_granted_ones`
 - `test_N17_invalid_transitions_revert`
@@ -39,17 +39,17 @@
 - `test_derived_binding_pins_the_same_version_and_inherits_depth`
 - `test_index_pagination`
 - `test_params_locator_update_keeps_hash`
-- `test_state_machine_happy_path_with_events`
+- `test_state_machine_happy_path_with_events` (suspension with a response set and a response reference, both cleared on resume; the record survives termination)
 - `test_supports_interface`
 
 ## Group 3 — registry-level check, combinators, Unknown (`test/ASFCheck.t.sol`)
 
 - `test_N23_no_binding_supplied_or_unknown_id`
-- `test_N24_state_reasons_and_restriction_surface`
+- `test_N24_state_reasons_and_restriction_surface` (the response set is returned with `Suspended`)
 - `test_N25_time_window_is_half_open`
 - `test_N26_clause_mismatches_in_evaluation_order`
 - `test_N27_a_new_specification_version_never_upgrades_a_binding`
-- `test_N28_ancestor_failure_propagates_to_derived_bindings`
+- `test_N28_ancestor_failure_propagates_to_derived_bindings` (the ancestor's response set is reported with `ParentNotSatisfied`)
 - `test_N29_unknown_when_the_specification_registry_is_unavailable`
 - `test_N30_requirement_validation`
 - `test_N31_combinators`
@@ -67,6 +67,7 @@
 - `test_N38_weaker_enforcement_declaration_is_refused`
 - `test_N39_only_the_operator_executes_and_only_the_owner_configures`
 - `test_N40_malformed_requirement_cannot_be_deployed`
+- `test_N48_combined_response_requirements_keep_derisking_open_unless_full_stop_is_set` (`RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY`: borrow refused, repay passes; `RESTRICT_DERISK_ONLY | RESTRICT_FULL_STOP`: repay refused as well)
 - `test_operator_acts_while_the_binding_is_satisfied`
 - `test_requirement_is_fixed_at_deployment`
 
@@ -88,11 +89,11 @@
 
 - `test_canonicalization_vector`
 - `test_identifier_hashes`
-- `test_interface_ids_match_the_vectors`
+- `test_interface_ids_match_the_vectors` (`IASFSpecificationRegistry` `0x9bddde77`, `IASFBindingRegistry` `0xb99bdc2a`)
 - `test_keys_match_the_on_chain_derivation`
 - `test_requirement_id_matches_the_registry`
 - `test_spec_and_binding_ids_follow_the_abi_encoding`
 
 ## Anvil rehearsal of the evidence script
 
-`script/SepoliaEvidence.s.sol` was run end to end on a local Anvil chain with three keys: deployCore (12 transactions), publishAndAdopt (7), guardLoop (6), tenderLoop (6), lifecycle (5) — 36 transactions. Observed: borrow ok, suspend `DeriskOnly`, borrow refused (probe event with revert data), repay ok, resume, borrow ok; tender accepted and the bound worker paid 0.001 ETH through the real `acceptFulfillment`, the unbound submission rejected; `FullStop` refused repay; charter terminated and the derived member binding reported `ParentNotSatisfied` while its own record stayed `Active`; swarm specification v1 deprecated with the binding unaffected.
+`script/SepoliaEvidence.s.sol` was run end to end on a local Anvil chain with three keys: deployCore (12 transactions), publishAndAdopt (7), guardLoop (6), tenderLoop (6), lifecycle (5) — 36 transactions, with the response sets and response references read from the relinked `manifest.json`. Observed: borrow ok; the guardian suspends with `RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY` (bits 9) and the `responseRef` of `guardian-derisk-only.response.json`; borrow refused (probe event with revert data); repay ok; resume; borrow ok; tender accepted and the bound worker paid 0.001 ETH through the real `acceptFulfillment`, the unbound submission rejected; the principal's `RESTRICT_FULL_STOP` suspension (bits 16, `principal-full-stop.response.json`) refused repay; charter terminated and the derived member binding reported `ParentNotSatisfied` while its own record stayed `Active`; swarm specification v1 deprecated with the binding unaffected.

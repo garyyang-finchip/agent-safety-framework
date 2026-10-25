@@ -1,83 +1,178 @@
-# Agent Safety Framework — design memo (v0.2)
+# Agent Safety and Security Framework — design memo (v0.3)
 
-This memo records the analysis behind the ERC text, the design decisions of the reference implementation, the relation to neighbouring proposals, and the open points. The ERC text (`ERCS/erc-asf.md`) is normative; this memo explains it.
+This memo records the analysis behind the ERC text, the design decisions of the reference implementation, the relation to neighbouring proposals, and the open points. The ERC text (`ERCS/erc-asf.md`) is normative; this memo explains it. Version 0.3 incorporates the third review round of the design: the taxonomy is kept as a multi-label index rather than a partition, suspensions carry combinable response requirements with a response document, native results of other mechanisms are preserved rather than normalized, incident reports and claims are governed by consumer rules without a kernel object, and the title names both safety and security.
 
 ## 1. Where the framework comes from
 
 The proposal grew out of a classification exercise: what do people mean by "security" when they discuss AI agents, on-chain theft, assistants that hold their users' accounts, and the behaviour of agents themselves. Two classifications were produced independently and then merged.
 
-The first classification follows the chain of a delegated action and asks where a relation that should hold breaks: substrate (do the mechanisms run as specified), identity (is the actor who it claims to be, for whom), authority (does it stay within what was granted, also after composition and re-delegation), information flow (are inputs handled according to their trust level, and is disclosure within permission), decision (right goal, right action, no deception or evasion of oversight), accountability (can effects be attributed, interrupted and remedied, and are the interveners themselves bounded) and the collective (do constraints still hold once many subjects interact). These seven links are non-overlapping and give every incident a primary class.
+The first follows the chain of a delegated action and asks where a relation that should hold breaks: substrate (do the mechanisms run as specified), identity (is the actor who it claims to be, and for whom), authority (does it stay within what was granted, also after composition and re-delegation), information flow (are inputs handled according to their trust level, and is disclosure within permission), decision (right goal, right action, no deception or evasion of oversight, no capability failure), accountability (can effects be attributed, interrupted and remedied, and are the interveners themselves bounded) and the collective (do constraints still hold once many subjects interact).
 
-The second classification asks what is protected and which relation must not be broken, and arrives at eight domains that are allowed to overlap: identity, authorization and control; information, privacy and input trust; technical execution, environment and supply chain; behaviour and goal alignment; assets, transactions and economics; collaboration, groups and systems; persons, society and public interest; governance, accountability and remedy. It adds six sources of risk (external attack, operator misuse, capability failure, goal and norm deviation, interaction and dependency failure, governance failure or abuse) and tags for lifecycle stage, impact scope and reversibility.
+The second asks what is protected and which relation must not be broken, and arrives at eight domains: identity, authorization and control; information, privacy and input trust; technical execution, environment and supply chain; behaviour and goal alignment; assets, transactions and economics; collaboration, groups and systems; persons, society and public interest; governance, accountability and remedy. It adds six sources of risk (external attack or manipulation; operator misuse; capability or cognitive failure; goal and norm deviation; interaction and dependency failure; governance failure or abuse) and tags for lifecycle stage, impact scope, reversibility and intervention latency.
 
-The merge keeps the seven links as the analytical primary axis, the protected domains as the second axis (the five domains that appear in the specification document: assets and economics, information and privacy, control and rules, credit and eligibility, third parties and the public), the six sources as the third axis, and the eight domains as the practical grouping of profiles. Nothing on chain depends on the families being disjoint, so the two views coexist: one for analysis, one for organizing vocabularies.
+The merge keeps the seven links, the five protected domains that appear in the specification document (assets and economics; information and privacy; control and rules; credit and eligibility; the rights and welfare of persons, society and the public, the principal included) and the six sources as three axes of one index, and the eight domains as the practical grouping of profiles. None of the axes is a partition: an incident usually carries several labels and a causal path through them; a record has its own identifier; a requirement is identified by profile and requirement identifiers; and a classification label never decides a permission, a responsibility or a response. Where a display needs one primary label, it states the method that produced it.
 
-Three cross-cutting judgments shaped the kernel:
+Three cross-cutting judgments shaped the kernel. Intent is not provable for a stochastic system: the framework never certifies alignment, it records commitments and evidence about behaviour and leaves the question of "good or bad" where it can be acted upon (bounded authority, attributable identity and credit, records and interventions, collective checks). A security document is not a control: the framework records where an arrangement is enforced and lets requirements demand enforcement at a chosen independence from the subject. And the value of making the adoption relation a chain record is a shared, verifiable, indexable record of who accepted what, interoperable across systems and checkable at the moment an on-chain resource acts; access control, isolation and execution boundaries in other environments enforce constraints too, and the framework names them as enforcement locations rather than ranking itself above them.
 
-- Intent is not provable for a stochastic system. The framework never certifies alignment. It records commitments and evidence about behaviour and leaves the question of "good or bad" where it can be acted upon: bounded authority, attributable identity and credit, records and interventions, and collective checks.
-- A security document is not a control. The framework therefore records where an arrangement is enforced, and lets requirements demand enforcement at a chosen independence from the subject.
-- The on-chain layer is the one place where order can be enforced rather than advised: a cap, a second factor, an escrow delay, a pause with a defined restriction can be invariants in accounts and contracts, where in other environments they remain best practice.
+## 2. Three axes, multi-label (Part A of the review)
 
-## 2. Why the adoption relation is the object
+### 2.1 Links: where a relation breaks
 
-An overlap review of agent-related proposals found the mechanisms well covered: wallet permission requests and smart-contract delegations; regulated agent mandates with caps, expiry and freeze; action-bound confidential policy verdicts with an execution guard and a policy-domain registry; attestation-gated actions; sandboxed agent wallets; identity, reputation and validation registries for agents; collective decision registries; task tenders with escrow and judgment windows; skill packages committed by hash; swarm charters; economic unit registries; resource discovery registries; protocol control disclosure. None of these records the relation between them: in this scope, which participants accepted which arrangement, in which version, enforced where, and whether the acceptance is in force now.
+| Link | Relation that must hold | Typical controls | Where ASF records it |
+|---|---|---|---|
+| substrate | mechanisms run as specified | pinned dependencies, isolation, audited contracts, crypto agility | `execution-supply-chain` profiles; enforcement channels and their `coverage` / `knownBypasses` |
+| identity | the actor is who it claims to be, and acts for whom it claims | account authenticity, agent identity registries, representation records | adopter = `msg.sender`; subject reference; `authorityRef` for representation |
+| authority | actions stay within what was granted, also after composition and re-delegation | permissions, mandates, caps, derived bindings | clauses with adopter/subject/scope/version/enforcement; derived-binding rules |
+| information flow | inputs are handled by trust level; disclosure stays within permission | provenance labels, data-not-instruction, disclosure allow lists | `information-privacy` profiles; relation-scoped properties (Section 12.2 of the ERC) |
+| decision | right goal, right action, no deception, no capability failure | goal checks, review, monitoring integrity | `behavior-goals` profiles; `permittedUses` / `prohibitedUses` |
+| accountability | effects attributable, interruptible, remediable; interveners bounded | interveners with explicit rights, response documents, incident channels | lifecycle transitions with actor and `reasonRef`; `remedies`; consumer rules 11.7 |
+| collective | constraints hold once many subjects interact | shared budgets, cascade limits, collective decisions | `multi-agent-system` profiles; `collective` enforcement location |
 
-Making that relation a registry object is a smaller addition than any new control and the one that lets the existing controls be composed and relied upon by third parties. Three alternatives were rejected: a registry of safety documents alone (it records opinions, not acceptance), a policy registry (several exist, and a registry that evaluated policies would acquire a privileged position), and one more allow/deny interface (the registry-level check is deliberately limited to facts about the relation).
+A single incident maps to several rows. The guardian who freezes an account without a right touches authority (an action outside what was granted) and accountability (an intervener acting without a basis); a shared budget exceeded by sub-agents touches authority (attenuation), the collective (metering across members) and the substrate (the coordinator's concurrency). The rows are search keys, not verdicts.
 
-## 3. The kernel
+### 2.2 Protected domains: what is at stake
+
+| Domain | Covers | Roles that can hold the interest |
+|---|---|---|
+| `assets-economic` | asset control, transaction and settlement, cumulative exposure, liquidity | principal, operator, counterparty |
+| `information-privacy` | input integrity and provenance, read / use / disclose / retain permissions, output and metadata disclosure | principal, counterparty, bystander |
+| `control-rules` | accounts, infrastructure, rule-making power, the controls and monitors themselves | principal, operator |
+| `credit-eligibility` | reputation, eligibility, the evidence that trust is built from | principal, operator |
+| `human-public` | the rights and welfare of persons, society and the public: the principal's own life, autonomy and freedom from manipulation included | principal, counterparty, bystander, public |
+
+The fifth domain was renamed in this revision: "third party" is a role relative to one delegation, not a complete protected interest, and a name built on it would have left out the principal's own rights. Roles are a separate field so that the same domain can be read from each affected party's side.
+
+### 2.3 Sources: why it happened
+
+| Source | Definition | Attribution basis |
+|---|---|---|
+| external attack or manipulation | an outside party changed the system's behaviour through inputs, credentials, supply chain or network | evidence of the vector; never inferred from the link where the failure surfaced |
+| operator misuse | the user or operator asked for the harmful behaviour | the instruction or configuration itself |
+| capability or cognitive failure | misunderstanding, wrong plan, wrong tool call, missing knowledge | reproduction or trace without an adversary or a conflicting goal |
+| goal and norm deviation | hiding problems, bypassing limits or departing from the accepted task to meet a metric | observed behaviour against the accepted task; motive stays a hypothesis unless evidenced |
+| interaction or dependency failure | an external service, market state or composition of systems failed | the dependency's own record |
+| governance failure or abuse | an intervener acted beyond its right, rules conflicted, oversight failed | the authority basis the actor lacked or exceeded |
+
+An incident may have several sources or none established; "undetermined" is a legitimate value, and malice is never inferred from the link at which a failure surfaced.
+
+### 2.4 Tags kept separately
+
+Lifecycle stage (design, admission, authorization, execution, monitoring, pause, revocation, recovery, dispute), impact scope (one action, one account, one organization, one swarm, a market, a public system), reversibility (how much can be undone afterwards) and intervention window (how fast a response must act) are distinct fields; the specification document carries the last two under `remedies`, and `serviceContinuity` names what must stay available while a response runs.
+
+### 2.5 Acceptance table for the original eight domains
+
+| Original domain | What the merged representation keeps | Where |
+|---|---|---|
+| identity, authorization and control | identity, representation, right to adopt, right to operate and right to intervene expressed separately | adopter / `authorityRef` / interveners / enforcement locations |
+| information, privacy and input trust | provenance and integrity, data-not-instruction, purpose, disclosure and retention bounds | `information-privacy` profiles; `permittedUses`; relation-scoped properties |
+| technical execution and supply chain | implementation integrity, isolation, dependencies, availability, upgrade and bypass | channels with `coverage` and `knownBypasses`; `execution-supply-chain` profiles |
+| behaviour and goal alignment | capability failure, goal deviation, harmful use, oversight evasion, attribution uncertainty | `behavior-goals` profiles; `prohibitedUses`; sources with "undetermined" |
+| assets, transactions and economics | asset control, settlement, cumulative exposure, liquidity and correlation | `assets-economic` domain; bounded-spend and shared-budget profiles |
+| collaboration, groups and systems | individual violation and group effect may coexist; shared resources and common dependencies explicit | `multi-agent-system` profiles; group-constraint requirements of ERC Section 12.2 |
+| persons, society and public interest | the principal and every other affected party, not only ex-post claims | `human-public` domain with roles; `permittedUses` / `prohibitedUses`; consumer rule 11.8 |
+| governance, accountability and remedy | actor and intervener both bounded; notice, response, correction, recovery and liability boundaries | interveners, response documents, consumer rule 11.7, `remedies` |
+
+A further test the representation must pass: two incidents with the same labels but different correct handling must stay distinguishable. An expired delegation and an expired price proof both read as "authority / information, expired"; in ASF the first is a binding reason (`Expired`, acted on by the registry check) and the second is evidence validity inside a profile (acted on by the profile's consumer rule), and nothing collapses them.
+
+## 3. Why the adoption relation is the object
+
+An overlap review of agent-related proposals (Section 7) found the mechanisms well covered: wallet permission requests and smart-contract delegations; regulated agent mandates with caps, expiry and freeze; inheritable mandates bounded per clause; action-bound confidential policy verdicts with an execution guard and a policy-domain registry; attestation-gated actions; sandboxed agent wallets; metering cursors for bounded actions; identity, reputation and validation registries for agents; trust attestations and decision trails; collective decision registries; task tenders with escrow and judgment windows; skill packages committed by hash; swarm charters; economic unit registries; resource discovery registries; protocol control disclosure. None of these records the relation between them: in this scope, which participants accepted which arrangement, in which version, enforced where, and whether the acceptance is in force now.
+
+Making that relation a registry object is a smaller addition than any new control and the one that lets the existing controls be composed and relied upon by third parties. Three alternatives were rejected: a registry of safety documents alone (it records opinions, not acceptance), a policy registry (several exist, and a registry that evaluated policies would acquire a privileged position), and one more allow/deny interface (the registry-level check is deliberately limited to facts about the relation). Subjects and boundaries are consumed from identity, swarm and unit registries, but none of those says who accepted which safety requirement for which task, resource and period; the same agent can be bound to different arrangements on two wallets and three tasks, which is why the binding, not the subject, is the object.
+
+## 4. The kernel
 
 Two objects, one check, one composition rule.
 
-**Safety Specification.** A versioned, content-addressed document. The members were chosen so that a reader can answer, without reading anything else: what is protected, where the specification applies, which constraints hold under which profile and over what (action, state, trajectory, group, relation), who may adopt and enforce and on what external authority, what evidence is expected and what it binds, through which channels at which locations with which coverage and known bypasses the constraints are enforced, what happens on unknown, denied and dependency failure, which remedies are pre-accepted, and which profiles a consumer must understand. Versions are immutable; deprecation is a signal. The registry keeps the hash, the locator, the publication time, the deprecation flag and the required profiles.
+**Safety Specification.** A versioned, content-addressed document whose members let a reader answer, without reading anything else: what is protected and for whom, where the specification applies and which uses it excludes, which constraints hold under which profile and over what (action, state, trajectory, group, relation), who may adopt and enforce and on what external authority, what evidence is expected and what it binds, through which channels at which locations with which coverage and known bypasses the constraints are enforced, what happens on unknown, denied and dependency failure, which responses, recovery, dispute and compensation are pre-accepted, how reversible harms are and how fast a response must come, which services continue, where incidents are reported, and which profiles a consumer must understand. Versions are immutable; deprecation is a signal.
 
 **Safety Binding.** The adoption relation. Three rules make the registry trustworthy in the only sense a registry can be: the adopter is the sending account; the adopter is part of every identifier and every index key; the entitlement to adopt is verified by consumers against their own permission source, not by the registry. The record pins a specification version by content hash, names the subject and scope by opaque keys, carries the parameters hash, an authority reference, the enforcement bit set, a validity window, optional interveners with explicit rights, and an optional parent.
 
-**Lifecycle.** Active, Suspended under one of five restrictions (no new risk, shrink, essential only, de-risk only, full stop), Terminated. The restrictions exist so that a suspension can say what continues; the reference guarded account shows the pattern by keeping listed de-risking calls open under de-risk only and nothing under full stop. Transitions record the actor and a reason reference; a binding identifier is never recreated; termination keeps the record.
+**Lifecycle and responses.** Active, Suspended, Terminated. A suspension carries a non-empty bit set of response requirements (no new risk, shrink, essential only, de-risk only, full stop) and the content hash of a response document that states initiator and basis, scope, prohibited, allowed and continuing actions, in-flight handling, duration and who may resume. The requirements are dimensions, not alternatives: one response can forbid new positions, shrink trading authority, keep repayment open and maintain a query service. Full stop dominates. Transitions record the actor and a reason reference; a binding identifier is never recreated; termination keeps the record.
 
-**Derived bindings.** The decidable part of attenuation is enforced on chain: same pinned version, validity inside the parent's, bounded depth, and ancestors must hold at evaluation. The profile-dependent part is stated as a rule (not wider under the profile's declared partial order, equal where none is declared, never satisfied by default) and verified by consumers from the two parameters documents. The undecidable part is declared undecidable.
+**Derived bindings.** The decidable part is enforced on chain: same pinned version, validity inside the parent's, bounded depth, ancestors must hold at evaluation. The profile-dependent part is a rule verified off chain: not wider under the profile's declared order, equal where none is declared, never satisfied by default. A derived binding references the original authorization (parent and its authority basis), states under which profiles its parameters are comparable and which cumulative constraints it shares, and names the mechanism that enforces it. The per-clause non-widening rule itself is already stated by a public inheritable-mandate proposal; the framework applies it to adoption records and claims no priority.
 
-**The check.** Pure registry logic with a defined evaluation order and a reason per clause; a verdict of Unknown where the registry itself cannot decide (the pinned specification registry no longer answers); combinators all-of, any-of and k-of that never count Unknown as satisfied and never produce a score.
+**The check.** Pure registry logic with a defined evaluation order and a reason per clause; `Unknown` where the registry cannot decide; combinators all-of (distinct necessary conditions), any-of and k-of (alternatives the publishing resource accepted in advance) that never count `Unknown` as satisfied and never form a score. The registry's `Verdict` and `Reason` describe the adoption relation only. Results of permission, policy, validation and decision mechanisms are read through adapters that preserve the mechanism's native result and reason, verification status, action and context, validity and the mapping rule; a confidential policy verdict's "no rule authorizes" stays distinct from "could not evaluate", a mandate's "over cumulative cap" from "expired", and account-abstraction validation data is never read as a verdict.
 
-## 4. The five additions of this revision
+## 5. Objects and authority (Part B of the review)
 
-Relative to the first draft of the adoption-relation design, this revision adds the pieces that make the framework effective rather than complete:
+| Object or field | Published or set by | Adopted or accepted by | Interpreted by | Enforced by | Modifiable by | Original standard consumed |
+|---|---|---|---|---|---|---|
+| Safety Specification version | publisher | adopters, by binding | consumers that understand its required profiles | the channels it names | nobody (immutable); publisher adds versions, may deprecate, may freeze | none (ERC-165 only) |
+| Profile descriptor | profile author | specifications that list it | consumers | the verification methods it lists | nobody (content-addressed); new identifier for a new version | none |
+| Safety Binding | adopter (`msg.sender`) | the adopter; other parties adopt separately | consumers | mechanisms at the declared locations | adopter and interveners within their rights; parameters hash never | subject and scope systems (identity registries, task tenders, swarms, units) by reference |
+| authority basis | the permission source | the adopter cites it | consumers verify it | the permission source | the permission source | wallet permissions, delegations, mandates, charters, tender terms |
+| requirement set | the resource (tender, charter, account) | fulfillers / members / operators by presenting bindings | the registry's `check` | the resource's own gate | the resource under its own rules | the resource's standard |
+| response document | the initiator of a suspension (adopter or intervener with the right) | — | consumers | the mechanisms that implement the response | nobody (a new response is a new document) | none |
+| intervener rights | the adopter at creation | the interveners | the registry | the registry | nobody (terminate and re-create) | decision mechanisms when the intervener is one |
+| incident report / claim | its source | a procedure with jurisdiction | the procedure | an entitled party, within its own authority | the source (correction, withdrawal), the procedure (finding) | identity facets, decision registries, dispute procedures |
+| evidence | its issuer | cited by bindings and specifications | consumers | — | issuer (revocation) | assertion and attestation registries |
 
-1. A registry-level `check` and two reference consumers that close the loop at an execution boundary, with negative tests: a guarded account whose operator is stopped by a suspension, and a task-tender acceptance authority that rejects an unbound fulfiller and leaves the kernel's own clock in force on Unknown.
-2. Derived bindings with an on-chain structural rule and an off-chain parameter rule.
-3. A five-value restriction vocabulary for suspensions, interveners with explicit rights fixed at creation, and a reason reference on every transition.
-4. A deliberate placement of incident and claim records outside the kernel in this version: they belong to behaviour facets of agent identities and to collective decision records, linked by binding identifier through the reason references. The kernel reserves the hook, not the object.
-5. A requirement grammar (clauses with explicit version lists, adopter, subject, scope and enforcement, combined by all-of, any-of, k-of), its identifier, and a document form with role-relative values that consumers resolve.
+Every row answers the same question the review asked: who may change what, and under which original authority. The registry itself changes only what the adopter or an entitled intervener asks it to change about the adoption relation.
 
-## 5. Relation to the agent standards family and to neighbouring proposals
+## 6. Scenario walkthrough (Part C of the review)
 
-The framework consumes and never re-defines:
+Each scenario names the links it touches (several), the expected behaviour under the framework and the failure boundary (what the framework does not decide). The 48 negative conformance tests of the suite (N01 to N48) exercise the registry-level behaviours; scenarios that cross into profile semantics are marked as consumer or profile obligations. The 28 conformance scenarios of the first adoption-relation draft are to be merged into this table when that package is available; duplicates will be removed by expected behaviour, not by title.
 
-| Provides | Role in a binding or requirement |
-|---|---|
-| agent identity and reputation registries (on-chain agent identities; address-anchored identities with behaviour facets) | subject references; evidence; the natural home of incident records |
-| know-your-agent assertion registries | evidence that a requirement can ask for; never a source of authority |
-| wallet permissions, delegations, regulated mandates, policy verdicts with execution guards | enforcement mechanisms at the account and contract locations; authority bases |
-| collective decision registries | the collective enforcement location; interveners' decisions; dispute resolution named in remedies |
-| task tenders and skill packages | scopes and subjects; the tender adapter is one consumer |
-| swarm charters | authority bases of organizer bindings; parents of member bindings |
-| economic unit registries | subjects and scopes; a future valuation profile may price posture |
-| resource discovery registries | discovery of specification registries and services, without upgrading discoverability into assurance |
-| protocol control disclosure | enforcement channel references for protocol-level controls |
+| Scenario | Links | Expected behaviour | Failure boundary |
+|---|---|---|---|
+| injected instruction makes an assistant try to pay | information flow, decision; authority as the control | content is data (untrusted-input profile); the account checks the binding at effect time; a cap or a suspension stops the payment | the registry does not detect the injection; the runtime and the account do |
+| in-scope misoperation (assistant deletes data it was allowed to touch) | decision (capability) | within authority; a safety specification can require review for destructive actions and name reversibility `irreversible`; no registry verdict changes | capability failure is a profile and evidence matter, not a binding state |
+| sub-agents' local caps exceed the parent budget | authority (attenuation), collective (metering), substrate (coordinator) | derived bindings pin the same version and fall with the parent; the shared-budget profile requires one metering scope and the invariant consumed + reserved <= total on every path | the registry cannot meter; the coordinator does, and must be named as the enforcing mechanism |
+| expired delegation vs expired price proof | authority vs information flow | `Expired` on the binding stops the check; an expired proof is evidence validity under its profile and is handled by that profile's rule | the two are kept apart by reason type, never merged |
+| external asset risk enters through a bridge or oracle | information flow, collective (contagion), assets (leverage, liquidity) | the specification lists the dependency as a channel with `coverage: partial` and the failure handling for dependency failure; a suspension with no-new-risk + de-risk-only follows | the framework does not model leverage or liquidity; the economic profile and its consumer do |
+| a guardian freezes an account without a right | authority, accountability (intervener) | `NotAuthorized`: only rights granted in the binding can transition it; a label or report confers nothing | whether a justified intervention was wise is for the dispute mechanism |
+| retry after an unknown outcome | accountability (records), substrate (idempotency) | consumer rule 11.5: authorized, evaluated, sent and outcome are separate facts; reconcile before retry; a retry under a new attempt id is not a new payable operation (shared-budget profile) | the registry stores none of these states; consumers do |
+| credential-based mass takeover of tenants | identity, authority, accountability (persistence) | an adopter's binding for an agent on one account does not extend to others; requirements name the scope; interveners can suspend; termination keeps the record | the registry cannot revoke the stolen credentials; the permission source must |
+| evaluation agents escape a sandbox and seek the answer key | decision, identity/authority (shared credentials), accountability (alerts ignored) | monitoring-integrity profile: monitors outside the subject's authority; a specification with `self`-only enforcement would be visibly a promise | enforcement location honesty is declared, not proven |
+| an orchestrating agent overrules a sub-agent's safety objection and disables alerts | decision, collective, accountability | monitoring-integrity: modification authority is never the monitored subject; `subagentVetoBinding` only means something if the sub-agent was granted that right | the framework does not grant vetoes; the arrangement must |
+| a signing front end is poisoned and several signers approve the same bad transaction | substrate, information flow, collective (correlated inputs) | a specification can require independent input channels for signers (coverage and bypasses declared); the binding records who accepted that arrangement | the registry does not verify independence; evidence does |
+| an exchange's withdrawal system is compromised through a third-party security component | substrate, identity, authority (no second gate) | pinned dependencies and a second gate as channels; a requirement demanding `contract` or `custodian` enforcement rejects `self`-only declarations | the framework does not audit components |
+| Sybil accounts fabricate reputation | identity (evidence independence, not key control), collective (credit market) | each account may prove key control; the credit-eligibility domain names evidence independence as what is protected; reports and labels confer no power | the framework does not score reputation |
+| an agent faithfully executes a fraud within granted authority | authority (legitimate use), decision, human-public | `prohibitedUses` and the `human-public` domain with roles are part of the arrangement; consumer rule 11.8 keeps authentic, authorized and legitimate apart | harm to third parties is not undone by a registry; interventions and procedures are |
 
-The ERC text names only merged proposals and describes the rest by concept, so that it depends normatively on nothing but interface detection.
+## 7. Overlap and adaptation review (Part D of the review)
 
-## 6. Conventions
+For each neighbouring proposal: what it returns natively, how a consumer reads it under ASF without loss, what ASF depends on, and what remains open. Statuses are as observed at the time of writing and change; versions must be pinned when an adapter is published.
 
-Content hashes are Keccak-256 over JCS-canonical UTF-8, the convention of the economic unit and resource discovery work of the same family, so that one tool chain serves all three. Subject references for accounts follow the CAIP-10 account form in lowercase; scope objects are canonicalized with JCS; the one-member `{"ref": ...}` form is derivable on chain. Identifiers bind chain and registry. Profile identifiers follow `asf:profile:<family-short-name>/<name>@<version>`.
+| Proposal | Native semantics relevant here | Lossless use under ASF | Dependency | Remaining gap |
+|---|---|---|---|---|
+| ERC-7710 Smart Contract Delegation (Draft, merged) | `redeemDelegations` against a Delegation Manager; caveats and acquisition left to implementations | an authority basis and an `account`-location mechanism; the delegation record is the basis a consumer verifies | none normative | caveat semantics are implementation-specific; a binding names the implementation and version |
+| ERC-7715 Request Permissions from Wallets (Draft, merged) | JSON-RPC permission request; depends on 7710 and account abstraction | the principal-facing way a permission that a binding cites comes into being | none normative | the only user-facing flow in the set; ASF adds nothing to it |
+| ERC-7780 Validation Module Extension (Draft, merged) | `checkUserOpPolicy` returns account-abstraction validation data | an `account`-location mechanism; its return is validation data, never read as a safety verdict | none normative | validation-time staleness; consumers re-check at effect time (ASF 11.3) |
+| ERC-8004 Trustless Agents (Draft, merged) | identity, reputation and validation registries | subject references; evidence; the natural home of behaviour records | none normative | reputation as deployed is gameable; ASF treats credit as a protected domain, not as a signal it consumes |
+| ERC-8226 Regulated Agent Mandate (Draft, merged) | `canExecute(agent, principal, asset, action, amount)` returns `(bool ok, MandateReason reason)` with eleven reasons (not yet valid, expired, revoked, action not enabled, frozen, over transaction cap, over cumulative cap, …); grants by principal with compliance provider; venues: token gate, delegated account, executor | an authority basis and an `account` / `contract` mechanism; adapters keep `MandateReason` as is | none normative | no inheritance (by design); ASF derived bindings reference a mandate as the original authorization |
+| ERC-8354 Confidential Agent Policy Verdicts (Draft, merged) | verdict envelope with `policyKind` ALLOWED / DENIED / NOT_PERMITTED / COULD_NOT_EVALUATE, action commitment, executor binding, nullifier, policy root age; guard consumes before executing | a `contract`-location mechanism; the four kinds are preserved, "no rule authorizes" never becomes "unknown"; a failed proof is not a denial | none normative | policy correctness is out of band for 8354 and for ASF alike |
+| ERC-8312 Bounded Agent Actions (draft, not merged) | metering cursor: `getCursor` / `advanceCursor` with witness, `spent <= cap`, hierarchical sub-budgets, contest/resolve; explicitly not an enforcer | the metering state a shared-budget profile can name as its authoritative count; enforcement stays with the gate | none | no reservation model; the shared-budget profile's unknown-outcome and reservation-authority requirements are not covered by a running count alone |
+| ERC-8370 Inheritable Agent Mandates (draft, not merged) | mandate committed into a soulbound identity; child ⊆ parent on every clause; generation counter; cascading freeze | the per-clause rule ASF's derived bindings also follow; a derived binding can cite an 8370 mandate as the original authorization | none | aggregate sibling spend bounded only by an optional partition; ASF's shared-budget profile addresses the aggregate |
+| ERC-8240 / PR 1705 Trust Infrastructure for Agents and Assets (not merged) | `IAttestation` (contestable scored attestations), `IDecisionTrail`, `IAccountability`, `IRiskSignal`, `IRWAPassport` | evidence sources; an accountability interface a dispute profile may reference | none | scoring semantics are the attestor's; ASF consumes attestations as evidence with their native scope |
+| ERC-8241 Protocol Control Disclosure (PR 1706, not merged) | declaration layer for a protocol's control structure; optional Safety Interfaces extension | channel references for protocol-level controls; a declaration is not verification, as 8241 itself states | none | absent vs undisclosed; version consistency |
+| ERC-8301 AI Agent Execution (PR 1815, not merged) | execution interface `callAgent` / `onAgentStep` / `onAgentProve` | a scope (one execution) and an evidence source (proofs) | none | — |
+| ERC-7730 Clear Signing (merged) | human-readable transaction descriptions | the principal-confirmation path of bounded-spend profiles | none | — |
+| OWASP Agent Control Standard | runtime control hooks and declarative controls across agent frameworks | `runtime`-location mechanisms; an ACS hook is a channel | none | — |
+| ERC-8210, ERC-8308 | not located in the merged tree or on the forum at the time of writing | — | — | references requested from the reviewer |
 
-## 7. Verification
+Two statements of earlier drafts were withdrawn in this revision because the review showed them inaccurate: that per-clause attenuation was an unclaimed gap (ERC-8370 states it), and that an eight-row-to-cells mapping proved the taxonomy lossless (it proved a mapping; Section 2.5 is the acceptance table that has to be met instead).
 
-The Foundry suite has 73 tests, 47 of them negative conformance scenarios (N01–N47) covering specification identity and immutability, binding creation rules, the state machine, intervener rights, derived bindings, clause semantics and evaluation order, combinators, Unknown propagation, the guarded-account loop and the tender loop against the vendored TASK-KERNEL v3.0 `TaskToken`. Vectors are generated with ethers and re-checked in Solidity (interface identifiers, keys, canonicalization, specification and binding identifiers, requirement identifier). The evidence script was rehearsed end to end on Anvil (36 transactions across five phases).
+The ERC text requires only interface detection. "Descriptive reference" is not a device to hide a dependency: the two registries can be understood and implemented without any concept of the proposals above, and the two consumers that do depend on a kernel (the task-tender adapter on a tender kernel interface, the guarded account on nothing but the registry) are examples, not the standard.
 
-## 8. Open points for the next round
+## 8. Effectiveness, stated without overreach
 
-- Shared-budget coordinator: the reserve-commit-release companion that makes the `economic/shared-budget` profile enforceable at the contract location is specified but not yet implemented; it is the next closed loop.
-- Composition of requirement sets: v1 combines clauses, not sets; a nested grammar (all-of over k-of) is a candidate once a consumer needs it.
-- Off-chain signed adoption (typed-data signatures relayed by a third party) is excluded from v1 to keep the dependency set at interface detection only; a profile can add it.
-- Cross-chain specification registries: v1 pins same-chain registries; a cross-chain pin needs a stated consistency model.
-- Incident and claim records: kept outside the kernel in v1; the reason references on transitions are the hook.
+An arrangement is effective when, within its declared scope and assumptions, its constraints act on the relevant paths, proportionate evidence supports that they do, and failures can be detected and responded to under an existing authority. Market legibility (requirements in tenders and charters, discounts in valuations, insurance) is a consumption of that information that an economic system may add; it is neither a condition of effectiveness nor a substitute for it, and the rights of persons and third parties are never priced away.
+
+## 9. Conventions
+
+Content hashes are Keccak-256 over JCS-canonical UTF-8, the convention of the economic unit and resource discovery work of the same family. Subject references for accounts follow the CAIP-10 account form in lowercase; scope objects are canonicalized with JCS; the one-member `{"ref": ...}` form is derivable on chain. Identifiers bind chain and registry. Profile identifiers follow `asf:profile:<family-short-name>/<name>@<version>`.
+
+## 10. Verification
+
+The Foundry suite has 74 tests, 48 of them negative conformance scenarios, covering specification identity and immutability, binding creation rules, the state machine with combinable response requirements and response references, intervener rights, derived bindings, clause semantics and evaluation order, combinators, `Unknown` propagation, the guarded-account loop (de-risking open under de-risk only, closed under full stop) and the tender loop against the vendored TASK-KERNEL v3.0 `TaskToken`. Vectors are generated with ethers and re-checked in Solidity. The evidence script was rehearsed end to end on Anvil (36 transactions across five phases) with the response documents of the examples.
+
+## 11. Open points
+
+- Shared-budget coordinator: the companion that makes the `economic/shared-budget` profile enforceable at the contract location under its seven requirements is specified, not yet implemented; it is the next closed loop.
+- Composition of requirement sets: v1 combines clauses, not sets; a nested grammar is a candidate once a consumer needs it.
+- Off-chain signed adoption is excluded from v1 to keep the dependency set at interface detection; a profile can add it.
+- Cross-chain specification registries need a stated consistency model.
+- Incident reports and claims: consumer rules only in v1; an optional accountability profile may standardize report and claim documents later.
+- The first adoption-relation draft's 28 conformance scenarios are to be merged into Section 6.

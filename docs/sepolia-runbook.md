@@ -17,7 +17,7 @@ export TASK_TOKEN=0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7   # live TASK-KERNE
 export DEPLOYMENTS=deployments/sepolia.json
 export MANIFEST=deployments/sepolia/examples/manifest.json
 export LOCATOR_BASE=https://raw.githubusercontent.com/garyyang-finchip/agent-safety-framework/main/deployments/sepolia/examples/
-mkdir -p deployments && echo '{}' > deployments/sepolia.json
+mkdir -p deployments/sepolia && echo '{}' > deployments/sepolia.json
 ```
 
 ## Phase 1: deploy
@@ -30,7 +30,7 @@ Deploys `ASFSpecificationRegistry`, `ASFBindingRegistry`, the `LendingDesk` targ
 
 ## Phase 2: relink the examples with the real addresses
 
-The example documents carry placeholder addresses. Copy them under `deployments/` and relink so that the hashes that go on chain are the hashes of the files that will be published:
+The example documents carry placeholder addresses. Copy them under `deployments/` and relink so that the hashes that go on chain are the hashes of the files that will be published (the `mkdir -p deployments/sepolia` of the setup block must have run first, otherwise `cp -r` creates `deployments/sepolia` as the examples directory itself):
 
 ```
 cp -r assets/erc-asf/examples deployments/sepolia/examples
@@ -57,7 +57,7 @@ Publishes the two specifications (the script checks that the on-chain `specId` e
 forge script script/SepoliaEvidence.s.sol --sig "guardLoop()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-borrow (ok) -> guardian suspends under `DeriskOnly` -> borrow refused (recorded by the probe's `Attempt` event with the revert data) -> repay ok -> principal resumes -> borrow ok.
+borrow (ok) -> guardian suspends with the response set of `guardian-derisk-only.response.json` (`RESTRICT_NO_NEW_RISK | RESTRICT_DERISK_ONLY`, bits 9) and its `responseRef` -> borrow refused (recorded by the probe's `Attempt` event with the revert data) -> repay ok -> principal resumes -> borrow ok. The bits and the response reference are read from the relinked `manifest.json`.
 
 ## Phase 5: tender loop
 
@@ -73,7 +73,29 @@ Mints a tender on the live `TaskToken` with the adapter as acceptance authority 
 forge script script/SepoliaEvidence.s.sol --sig "lifecycle()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-`FullStop` suspension refuses even repay; resume; the swarm binding is terminated and the derived member binding fails with `ParentNotSatisfied` while its own record stays `Active`; version 1 of the swarm specification is deprecated.
+The principal suspends with the response set of `principal-full-stop.response.json` (`RESTRICT_FULL_STOP`, bits 16): even repay is refused; resume; the swarm binding is terminated and the derived member binding fails with `ParentNotSatisfied` while its own record stays `Active`; version 1 of the swarm specification is deprecated.
+
+## Rehearsal on Anvil
+
+The same six phases run against a local Anvil chain with its default funded keys; this is how the run was rehearsed (36 transactions). The only differences are the chain id (which `build-examples.js --chain-id 31337` also writes into every `eip155:` reference of the copied examples), a local locator base and the fixture `TaskToken` that `deployCore` deploys when `TASK_TOKEN` is unset:
+
+```
+anvil --port 8545 &
+export PRIVATE_KEY=<anvil key 0> AGENT_PK=<anvil key 1> GUARDIAN_PK=<anvil key 2>
+export DEPLOYMENTS=deployments/anvil.json MANIFEST=deployments/anvil/examples/manifest.json LOCATOR_BASE=http://localhost/examples/
+mkdir -p deployments/anvil && echo '{}' > deployments/anvil.json
+forge script script/SepoliaEvidence.s.sol --sig "deployCore()" --rpc-url http://127.0.0.1:8545 --broadcast
+cp -r assets/erc-asf/examples deployments/anvil/examples
+D=deployments/anvil.json; j() { python3 -c "import json;print(json.load(open('$D'))['$1'])"; }
+node tools/build-examples.js --dir deployments/anvil/examples --chain-id 31337 \
+  --spec-registry $(j specRegistry) --binding-registry $(j bindingRegistry) --publisher $(j deployer) \
+  --map "0x00000000000000000000000000000000000a11ce=$(j deployer),0x000000000000000000000000000000000000a6e7=$(j agent),0x0000000000000000000000000000000000006a2d=$(j guardian),0x00000000000000000000000000000000000060a9=$(j deployer),0x00000000000000000000000000000000000000aa=$(j agent),0x0000000000000000000000000000000000006a4d=$(j guardedAccount)"
+for ph in publishAndAdopt guardLoop tenderLoop lifecycle; do
+  forge script script/SepoliaEvidence.s.sol --sig "$ph()" --rpc-url http://127.0.0.1:8545 --broadcast
+done
+```
+
+`deployments/anvil*` is a rehearsal record and is not kept in the repository.
 
 ## Record
 
