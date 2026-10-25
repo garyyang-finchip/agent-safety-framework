@@ -35,7 +35,7 @@ contract ASFGuardedAccountTest is ASFBase {
         T.BindingInput memory i = input(keccak256("wallet"));
         i.scopeKey = keccak256(bytes(string.concat('{"ref":"', "guarded-account", '"}')));
         i.enforcement = T.ENFORCED_ACCOUNT;
-        i = withGuardian(i, T.RIGHT_SUSPEND);
+        i = withGuardian(i, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
         bindingId = adoptAs(user, i);
         vm.prank(user);
         acct.presentBindings(ids1(bindingId));
@@ -55,7 +55,7 @@ contract ASFGuardedAccountTest is ASFBase {
         exec(abi.encodeCall(LendingDesk.placeOrder, ()));
         assertEq(desk.debt(address(acct)), 100);
         assertEq(desk.orders(address(acct)), 1);
-        (T.Verdict v,) = acct.status();
+        (T.Verdict v,,) = acct.status();
         assertVerdict(v, T.Verdict.Satisfied);
     }
 
@@ -89,8 +89,9 @@ contract ASFGuardedAccountTest is ASFBase {
         acct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
         exec(abi.encodeCall(LendingDesk.repay, (10)));
         assertEq(desk.debt(address(acct)), 90);
-        // adding full stop to the same set closes the de-risking path as well
-        vm.prank(user);
+        // adding full stop to the same set closes the de-risking path as well (the guardian lifts its own
+        // suspension; the principal could not)
+        vm.prank(guardian);
         reg.resume(bindingId, bytes32(0));
         vm.prank(user);
         reg.suspend(bindingId, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP, keccak256("response"), bytes32(0));
@@ -109,12 +110,16 @@ contract ASFGuardedAccountTest is ASFBase {
     }
 
     function test_N35_resume_reopens_and_terminate_closes_for_good() public {
-        vm.prank(user);
+        vm.prank(guardian);
         reg.suspend(bindingId, T.RESTRICT_NO_NEW_RISK, bytes32(0), bytes32(0));
         vm.prank(agent);
         vm.expectRevert();
         acct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        // the principal cannot wave the guardian's stop away; the guardian lifts it
         vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(bindingId, bytes32(0));
+        vm.prank(guardian);
         reg.resume(bindingId, bytes32(0));
         exec(abi.encodeCall(LendingDesk.borrow, (1)));
         vm.prank(user);
@@ -145,7 +150,7 @@ contract ASFGuardedAccountTest is ASFBase {
         bytes32 impostor = adoptAs(rando, i);
         vm.prank(user);
         acct.presentBindings(ids1(impostor));
-        (T.Verdict v, T.Reason[] memory reasons) = acct.status();
+        (T.Verdict v, T.Reason[] memory reasons,) = acct.status();
         assertVerdict(v, T.Verdict.NotSatisfied);
         assertReason(reasons[0], T.Reason.AdopterMismatch);
         vm.prank(agent);
@@ -159,7 +164,7 @@ contract ASFGuardedAccountTest is ASFBase {
         bytes32 weak = adoptAs(user, i);
         vm.prank(user);
         acct.presentBindings(ids1(weak));
-        (, T.Reason[] memory reasons) = acct.status();
+        (, T.Reason[] memory reasons,) = acct.status();
         assertReason(reasons[0], T.Reason.EnforcementMismatch);
     }
 
@@ -189,5 +194,123 @@ contract ASFGuardedAccountTest is ASFBase {
         assertEq(r.clauses[0].subjectKey, subjectAgent);
         assertEq(r.clauses[0].versions[0], 1);
         assertEq(r.clauses[0].enforcement, T.ENFORCED_ACCOUNT);
+    }
+
+    // ------------------------------------------------------------- derived bindings on the wallet path
+
+    /// The agent operates under its own binding derived from the principal's root binding; the account
+    /// requires the agent's own (derived) adoption, account-enforced.
+    function deriveSetup() internal returns (ASFGuardedAccount dacct, bytes32 root, bytes32 child) {
+        T.BindingInput memory p = input(keccak256("root"));
+        p.enforcement = T.ENFORCED_ACCOUNT;
+        p = withGuardian(p, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        root = adoptAs(user, p);
+        T.BindingInput memory c = input(keccak256("child"));
+        c.enforcement = T.ENFORCED_ACCOUNT;
+        c.parentBindingId = root;
+        child = adoptAs(agent, c);
+        T.Clause memory cl = clauseFor(agent, subjectAgent, scopeWallet, 1);
+        cl.enforcement = T.ENFORCED_ACCOUNT;
+        dacct = new ASFGuardedAccount(reg, user, agent, one(cl));
+        vm.startPrank(user);
+        dacct.presentBindings(ids1(child));
+        dacct.setDeriskAllowed(address(desk), LendingDesk.repay.selector, true);
+        dacct.setDeriskAllowed(address(desk), LendingDesk.cancelOrder.selector, true);
+        vm.stopPrank();
+    }
+
+    function dexec(ASFGuardedAccount dacct, bytes memory data) internal {
+        vm.prank(agent);
+        dacct.execute(address(desk), 0, data);
+    }
+
+    function test_N52_a_parents_derisk_only_suspension_keeps_the_derived_bindings_unwinding_open() public {
+        (ASFGuardedAccount dacct, bytes32 root, bytes32 child) = deriveSetup();
+        dexec(dacct, abi.encodeCall(LendingDesk.borrow, (100)));
+        dexec(dacct, abi.encodeCall(LendingDesk.placeOrder, ()));
+        // the guardian suspends the ROOT with no new risk + de-risk only
+        vm.prank(guardian);
+        reg.suspend(root, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY, keccak256("response"), keccak256("alert"));
+        (T.Verdict v, T.Reason[] memory reasons, uint8[] memory sets) = dacct.status();
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.ParentNotSatisfied);
+        assertEq(sets[0], T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY, "the set in force comes from the ancestor");
+        assertEq(reg.bindingOf(root).restrictions, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY);
+        // new exposure is blocked through the derived binding...
+        vm.prank(agent);
+        vm.expectRevert();
+        dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        vm.prank(agent);
+        vm.expectRevert();
+        dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.placeOrder, ()));
+        // ...while the de-risking calls still go through, although the child's own record carries no set
+        assertEq(reg.bindingOf(child).restrictions, 0, "the derived record itself is Active with an empty set");
+        dexec(dacct, abi.encodeCall(LendingDesk.repay, (40)));
+        dexec(dacct, abi.encodeCall(LendingDesk.cancelOrder, ()));
+        assertEq(desk.debt(address(dacct)), 60);
+        assertEq(desk.orders(address(dacct)), 0);
+        // the guardian lifts its suspension: everything reopens
+        vm.prank(guardian);
+        reg.resume(root, bytes32(0));
+        dexec(dacct, abi.encodeCall(LendingDesk.borrow, (1)));
+        assertEq(desk.debt(address(dacct)), 61);
+    }
+
+    function test_N53_a_parents_full_stop_or_termination_closes_the_derived_bindings_derisking_path() public {
+        (ASFGuardedAccount dacct, bytes32 root,) = deriveSetup();
+        dexec(dacct, abi.encodeCall(LendingDesk.borrow, (100)));
+        // full stop on the root: even repay through the derived binding reverts
+        vm.prank(user);
+        reg.suspend(root, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
+        vm.prank(agent);
+        vm.expectRevert();
+        dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+        vm.prank(user);
+        reg.resume(root, bytes32(0));
+        dexec(dacct, abi.encodeCall(LendingDesk.repay, (1)));
+        // termination of the root: ParentNotSatisfied with an empty set; nothing goes through
+        vm.prank(user);
+        reg.terminate(root, bytes32(0));
+        (T.Verdict v, T.Reason[] memory reasons, uint8[] memory sets) = dacct.status();
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.ParentNotSatisfied);
+        assertEq(sets[0], 0);
+        vm.prank(agent);
+        vm.expectRevert();
+        dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+    }
+
+    function test_N54_sets_of_the_child_and_of_the_parent_combine_and_full_stop_dominates() public {
+        (ASFGuardedAccount dacct, bytes32 root, bytes32 child) = deriveSetup();
+        dexec(dacct, abi.encodeCall(LendingDesk.borrow, (100)));
+        // root: de-risk only; child: essential only. The union keeps the de-risking path open.
+        vm.prank(guardian);
+        reg.suspend(root, T.RESTRICT_DERISK_ONLY, bytes32(0), bytes32(0));
+        vm.prank(agent);
+        reg.suspend(child, T.RESTRICT_ESSENTIAL_ONLY, bytes32(0), bytes32(0));
+        (, T.Reason[] memory reasons, uint8[] memory sets) = dacct.status();
+        assertReason(reasons[0], T.Reason.Suspended);
+        assertEq(sets[0], T.RESTRICT_DERISK_ONLY | T.RESTRICT_ESSENTIAL_ONLY);
+        dexec(dacct, abi.encodeCall(LendingDesk.repay, (10)));
+        // child: full stop while the root still says de-risk only. Full stop dominates: repay reverts.
+        vm.prank(agent);
+        reg.resume(child, bytes32(0));
+        vm.prank(agent);
+        reg.suspend(child, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
+        vm.prank(agent);
+        vm.expectRevert();
+        dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+        // and the other way round: root full stop, child de-risk only
+        vm.prank(agent);
+        reg.resume(child, bytes32(0));
+        vm.prank(guardian);
+        reg.resume(root, bytes32(0));
+        vm.prank(user);
+        reg.suspend(root, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
+        vm.prank(agent);
+        reg.suspend(child, T.RESTRICT_DERISK_ONLY, bytes32(0), bytes32(0));
+        vm.prank(agent);
+        vm.expectRevert();
+        dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
     }
 }

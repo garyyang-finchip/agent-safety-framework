@@ -185,6 +185,7 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(uint8(b.state), uint8(T.BindingState.Suspended));
         assertEq(b.restrictions, T.RESTRICT_NO_NEW_RISK);
         assertEq(b.responseRef, keccak256("response-1"));
+        assertEq(b.suspendedBy, user);
 
         vm.warp(block.timestamp + 1 hours);
         vm.prank(user);
@@ -193,6 +194,7 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(uint8(b.state), uint8(T.BindingState.Active));
         assertEq(b.restrictions, 0, "resume clears the response requirements");
         assertEq(b.responseRef, bytes32(0));
+        assertEq(b.suspendedBy, address(0));
         assertEq(b.stateChangedAt, uint64(block.timestamp));
 
         vm.prank(user);
@@ -247,10 +249,62 @@ contract ASFBindingLifecycleTest is ASFBase {
         vm.prank(guardian);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
         reg.terminate(id, bytes32(0));
-        // the adopter resumes
+        // the guardian's suspension is not the adopter's to lift: the adopter can only terminate
+        assertEq(reg.bindingOf(id).suspendedBy, guardian);
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        vm.prank(user);
+        reg.terminate(id, keccak256("replaced"));
+        assertEq(uint8(reg.bindingOf(id).state), uint8(T.BindingState.Terminated));
+        assertEq(reg.bindingOf(id).suspendedBy, address(0));
+    }
+
+    function test_N49_an_interveners_suspension_is_lifted_only_by_an_intervener_holding_the_right() public {
+        // guardian may only suspend; the executor of a collective decision may suspend, resume and terminate
+        T.BindingInput memory i = input(keccak256("b"));
+        T.Intervener[] memory iv = new T.Intervener[](2);
+        iv[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        iv[1] = T.Intervener({account: rando, rights: T.RIGHT_ALL});
+        i.interveners = iv;
+        bytes32 id = adoptAs(user, i);
+
+        // guardian suspends: the adopter cannot resume, the executor can
+        vm.prank(guardian);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, keccak256("resp"), keccak256("alert"));
+        assertEq(reg.bindingOf(id).suspendedBy, guardian);
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        vm.prank(rando);
+        reg.resume(id, keccak256("decision"));
+        assertEq(uint8(reg.bindingOf(id).state), uint8(T.BindingState.Active));
+        assertEq(reg.bindingOf(id).suspendedBy, address(0));
+
+        // the adopter's own suspension: the adopter may lift it, and so may an intervener with the right
+        vm.prank(user);
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
+        assertEq(reg.bindingOf(id).suspendedBy, user);
         vm.prank(user);
         reg.resume(id, bytes32(0));
+        vm.prank(user);
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
+        vm.prank(rando);
+        reg.resume(id, bytes32(0));
         assertEq(uint8(reg.bindingOf(id).state), uint8(T.BindingState.Active));
+
+        // the executor's suspension: the adopter cannot lift it either; the executor can; a suspend-only
+        // guardian still cannot
+        vm.prank(rando);
+        reg.suspend(id, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        vm.prank(guardian);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        vm.prank(rando);
+        reg.resume(id, bytes32(0));
     }
 
     function test_N17_invalid_transitions_revert() public {

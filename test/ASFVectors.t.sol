@@ -82,6 +82,15 @@ contract ASFVectorsTest is ASFBase {
             uint256[] memory vs = vm.parseJsonUintArray(j, string.concat(p, ".versions"));
             uint32[] memory versions = new uint32[](vs.length);
             for (uint256 k = 0; k < vs.length; k++) versions[k] = uint32(vs[k]);
+            uint256 ni = vm.parseJsonUint(j, string.concat(p, ".intervenerCount"));
+            T.Intervener[] memory iv = new T.Intervener[](ni);
+            for (uint256 k = 0; k < ni; k++) {
+                string memory q = string.concat(p, ".interveners[", vm.toString(k), "]");
+                iv[k] = T.Intervener({
+                    account: vm.parseJsonAddress(j, string.concat(q, ".account")),
+                    rights: uint8(vm.parseJsonUint(j, string.concat(q, ".rights")))
+                });
+            }
             r.clauses[i] = T.Clause({
                 specRegistry: vm.parseJsonAddress(j, string.concat(p, ".specRegistry")),
                 specId: vm.parseJsonBytes32(j, string.concat(p, ".specId")),
@@ -89,7 +98,8 @@ contract ASFVectorsTest is ASFBase {
                 adopter: vm.parseJsonAddress(j, string.concat(p, ".adopter")),
                 subjectKey: vm.parseJsonBytes32(j, string.concat(p, ".subjectKey")),
                 scopeKey: vm.parseJsonBytes32(j, string.concat(p, ".scopeKey")),
-                enforcement: uint16(vm.parseJsonUint(j, string.concat(p, ".enforcement")))
+                enforcement: uint16(vm.parseJsonUint(j, string.concat(p, ".enforcement"))),
+                interveners: iv
             });
         }
         assertEq(abi.encode(r), vm.parseJsonBytes(j, ".encoded"), "abi encoding");

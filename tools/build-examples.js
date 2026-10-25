@@ -148,6 +148,7 @@ for (const f of order) {
     validUntil: doc.validity?.until ?? 0,
     parentBindingId,
     interveners: (doc.interveners || []).map((iv) => ({ account: addressOf(iv.ref), rights: C.rightsMask(iv.rights) })),
+    intervenerCount: (doc.interveners || []).length, // for Solidity readers, which cannot take array lengths from JSON
     salt: doc.metadata.salt,
     bindingId,
   };
@@ -178,6 +179,10 @@ for (const f of listJson(path.join(EX, 'requirements'))) {
         subjectKey: c.subject && c.subject !== 'any' ? C.subjectKey(c.subject) : '0x' + '0'.repeat(64),
         scopeKey: c.scope && c.scope !== 'any' ? C.scopeKey(c.scope) : '0x' + '0'.repeat(64),
         enforcement: C.enforcementMask(c.enforcement || []),
+        interveners: (c.interveners || []).map((iv) => ({
+          account: iv.ref === 'any' ? '0x' + '0'.repeat(40) : addressOf(iv.ref),
+          rights: C.rightsMask(iv.rights),
+        })),
       })),
     };
   }

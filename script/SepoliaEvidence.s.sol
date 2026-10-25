@@ -29,10 +29,10 @@ import {ITaskTender} from "../test/fixtures/task-token/interfaces/ITaskTender.so
 ///   2. publishAndAdopt() publish the two specifications; principal adopts for the assistant on the guarded
 ///                        account; organizer adopts for the swarm; agent adopts the derived member binding and
 ///                        its own worker binding; the principal presents the binding to the guarded account
-///   3. guardLoop()       borrow (ok) -> guardian suspends DeriskOnly -> borrow refused -> repay ok -> resume -> borrow ok
+///   3. guardLoop()       borrow (ok) -> guardian suspends (no new risk + derisk only) -> borrow refused -> repay ok -> guardian resumes -> borrow ok
 ///   4. tenderLoop()      mint a tender with the adapter as authority, fund it; the agent submits and is accepted
 ///                        and paid; the guardian (no binding) submits and is rejected
-///   5. lifecycle()       FullStop suspension refuses even repay; resume; terminate the swarm binding and show the
+///   5. lifecycle()       full-stop suspension by the principal refuses even repay; resume; terminate the swarm binding and show the
 ///                        derived member binding failing with ParentNotSatisfied; deprecate a version
 ///
 /// Environment: PRIVATE_KEY, AGENT_PK, GUARDIAN_PK, optional TASK_TOKEN (live kernel), optional DEPLOYMENTS
@@ -123,9 +123,13 @@ contract SepoliaEvidence is Script {
     }
 
     /// The tender requires the fulfiller's own adoption of the same specification, account-enforced.
+    /// The tender requires the fulfiller's own adoption of Personal Assistant Safety v1, account-enforced, with
+    /// the task publisher (the deployer) named as an intervener holding the suspend right.
     function _deployAdapter(Core memory c) internal {
         if (c.taskToken == address(0)) c.taskToken = address(new TaskToken("Task Token", "TASK"));
         T.RequirementSet memory tmpl = _oneClause(c.specs, c.spec1, address(0), bytes32(0));
+        tmpl.clauses[0].interveners = new T.Intervener[](1);
+        tmpl.clauses[0].interveners[0] = T.Intervener({account: c.deployer, rights: T.RIGHT_SUSPEND});
         c.adapter = address(new ASFTaskTenderAdapter(ASFBindingRegistry(c.reg), ITaskTenderKernel(c.taskToken), tmpl));
     }
 
@@ -209,9 +213,9 @@ contract SepoliaEvidence is Script {
         ASFBindingRegistry reg = ASFBindingRegistry(_addr(".bindingRegistry"));
         address specs = _addr(".specRegistry");
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+        // interveners come from the relinked example (the guardian with suspend + resume)
         T.BindingInput memory b1 = _input(m, "personal-assistant.binding.json", specs, spec1, "bindings/personal-assistant.binding.json");
-        b1.interveners = new T.Intervener[](1);
-        b1.interveners[0] = T.Intervener({account: _addr(".guardian"), rights: T.RIGHT_SUSPEND});
+        require(b1.interveners.length == 1 && b1.interveners[0].account == _addr(".guardian"), "guardian not relinked");
         personal = reg.adopt(b1);
         bytes32[] memory present = new bytes32[](1);
         present[0] = personal;
@@ -235,7 +239,6 @@ contract SepoliaEvidence is Script {
     // ------------------------------------------------------------------ phase 3
 
     function guardLoop() external {
-        uint256 pk = vm.envUint("PRIVATE_KEY");
         uint256 agentPk = vm.envUint("AGENT_PK");
         uint256 guardianPk = vm.envUint("GUARDIAN_PK");
         ASFBindingRegistry reg = ASFBindingRegistry(_addr(".bindingRegistry"));
@@ -262,10 +265,11 @@ contract SepoliaEvidence is Script {
         (bool ok2,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
         (bool ok3,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.repay, (40)));
         vm.stopBroadcast();
-        require(!ok2, "borrow under DeriskOnly should be refused");
-        require(ok3, "repay under DeriskOnly should pass");
+        require(!ok2, "borrow under no-new-risk + derisk-only should be refused");
+        require(ok3, "repay under no-new-risk + derisk-only should pass");
 
-        vm.startBroadcast(pk);
+        // the guardian's suspension is not the principal's to lift: the guardian (suspend + resume) resumes
+        vm.startBroadcast(guardianPk);
         reg.resume(personal, keccak256("reviewed: false alarm"));
         vm.stopBroadcast();
 
@@ -274,7 +278,7 @@ contract SepoliaEvidence is Script {
         vm.stopBroadcast();
         require(ok4, "borrow after resume should pass");
 
-        _put(".guardLoop", '"borrow ok; suspend DeriskOnly; borrow refused; repay ok; resume; borrow ok"');
+        _put(".guardLoop", '"borrow ok; guardian suspends (no new risk + derisk only); borrow refused; repay ok; guardian resumes; borrow ok"');
         console2.log("guard loop complete; desk debt", desk.debt(_addr(".guardedAccount")));
     }
 
@@ -343,7 +347,7 @@ contract SepoliaEvidence is Script {
         vm.startBroadcast(agentPk);
         (bool ok,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
         vm.stopBroadcast();
-        require(!ok, "FullStop refuses even repay");
+        require(!ok, "full stop refuses even repay");
 
         vm.startBroadcast(pk);
         reg.resume(personal, keccak256("maintenance over"));
@@ -359,7 +363,7 @@ contract SepoliaEvidence is Script {
         require(v == T.Verdict.NotSatisfied && r == T.Reason.ParentNotSatisfied, "member falls with the charter");
         require(reg.bindingOf(member).state == T.BindingState.Active, "member record untouched");
 
-        _put(".lifecycle", '"FullStop refused repay; resumed; charter terminated; member ParentNotSatisfied; swarm spec v1 deprecated"');
+        _put(".lifecycle", '"full stop refused repay; resumed; charter terminated; member ParentNotSatisfied; swarm spec v1 deprecated"');
         console2.log("lifecycle complete");
     }
 
@@ -400,6 +404,14 @@ contract SepoliaEvidence is Script {
         i.validFrom = uint64(vm.parseJsonUint(m, string.concat(k, ".validFrom")));
         i.validUntil = uint64(vm.parseJsonUint(m, string.concat(k, ".validUntil")));
         i.salt = vm.parseJsonBytes32(m, string.concat(k, ".salt"));
-        i.interveners = new T.Intervener[](0);
+        uint256 n = vm.parseJsonUint(m, string.concat(k, ".intervenerCount"));
+        i.interveners = new T.Intervener[](n);
+        for (uint256 j = 0; j < n; j++) {
+            string memory q = string.concat(k, ".interveners[", vm.toString(j), "]");
+            i.interveners[j] = T.Intervener({
+                account: vm.parseJsonAddress(m, string.concat(q, ".account")),
+                rights: uint8(vm.parseJsonUint(m, string.concat(q, ".rights")))
+            });
+        }
     }
 }

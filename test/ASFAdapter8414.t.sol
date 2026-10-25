@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {ASFBase} from "./ASFBase.t.sol";
 import {ASFTypes as T} from "asf/ASFTypes.sol";
+import {ASFErrors} from "asf/ASFErrors.sol";
 import {ASFKeys} from "asf/libraries/ASFKeys.sol";
 import {ASFTaskTenderAdapter} from "asf/adapters/ASFTaskTenderAdapter.sol";
 import {ITaskTenderKernel} from "asf/interfaces/ITaskTenderKernel.sol";
@@ -217,5 +218,84 @@ contract ASFAdapter8414Test is ASFBase {
         adapter.judge(id, s2);
         assertEq(uint8(task.submissionOf(id, s1).status), uint8(ITaskTender.SubmissionStatus.Accepted));
         assertEq(uint8(task.submissionOf(id, s2).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+    }
+
+    // ------------------------------------------------------------- who can stop a fulfiller
+
+    /// A tender whose clause requires the task publisher as an intervener with the suspend right.
+    function adapterRequiringPublisher() internal returns (ASFTaskTenderAdapter a) {
+        T.Clause memory c = clause();
+        c.versions = new uint32[](1);
+        c.versions[0] = 1;
+        c.enforcement = T.ENFORCED_ACCOUNT;
+        c.interveners = new T.Intervener[](1);
+        c.interveners[0] = T.Intervener({account: taskPublisher, rights: T.RIGHT_SUSPEND});
+        a = new ASFTaskTenderAdapter(reg, ITaskTenderKernel(address(task)), one(c));
+    }
+
+    function selfAdoptWithIntervener(address who, bytes32 salt, address intervener, uint8 rights) internal returns (bytes32 id) {
+        T.BindingInput memory i = input(salt);
+        i.subjectKey = ASFKeys.accountSubjectKey(who);
+        i.scopeKey = ASFKeys.refScopeKey("task-tenders");
+        i.enforcement = T.ENFORCED_ACCOUNT;
+        i.interveners = new T.Intervener[](1);
+        i.interveners[0] = T.Intervener({account: intervener, rights: rights});
+        id = adoptAs(who, i);
+    }
+
+    function test_N55_a_fulfiller_whose_binding_does_not_name_the_required_intervener_is_rejected() public {
+        ASFTaskTenderAdapter a = adapterRequiringPublisher();
+        // a self-adopted binding under the fulfiller's sole control does not meet the tender's requirement
+        selfAdopt(worker, keccak256("w"), T.ENFORCED_ACCOUNT);
+        uint256 id = task.mintTask(owner, taskPublisher, address(a), TD, TH, "ipfs://task-v1", terms(7 days));
+        vm.prank(funder);
+        task.fundTask{value: 2 ether}(id, 2 ether);
+        uint256 s1 = submit(worker, id);
+        (T.Verdict v,, T.Reason[] memory reasons) = a.evaluate(worker);
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.IntervenerMismatch);
+        a.judge(id, s1);
+        assertEq(uint8(task.submissionOf(id, s1).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+        // a binding that names the publisher with the suspend right is admitted
+        bytes32 b = selfAdoptWithIntervener(worker2, keccak256("w2"), taskPublisher, T.RIGHT_SUSPEND);
+        uint256 s2 = submit(worker2, id);
+        (T.Verdict v2, bytes32[] memory ids,) = a.evaluate(worker2);
+        assertVerdict(v2, T.Verdict.Satisfied);
+        assertEq(ids[0], b);
+        a.judge(id, s2);
+        assertEq(uint8(task.submissionOf(id, s2).status), uint8(ITaskTender.SubmissionStatus.Accepted));
+    }
+
+    function test_N56_the_publishers_suspension_is_not_the_fulfillers_to_lift_before_judgment() public {
+        ASFTaskTenderAdapter a = adapterRequiringPublisher();
+        bytes32 b = selfAdoptWithIntervener(worker, keccak256("w"), taskPublisher, T.RIGHT_SUSPEND);
+        uint256 id = task.mintTask(owner, taskPublisher, address(a), TD, TH, "ipfs://task-v1", terms(7 days));
+        vm.prank(funder);
+        task.fundTask{value: 2 ether}(id, 2 ether);
+        uint256 sid = submit(worker, id);
+        // the publisher suspends the fulfiller's binding after a report; the fulfiller cannot resume it
+        vm.prank(taskPublisher);
+        reg.suspend(b, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        vm.prank(worker);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(b, bytes32(0));
+        (T.Verdict v,, T.Reason[] memory reasons) = a.evaluate(worker);
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.Suspended);
+        a.judge(id, sid);
+        assertEq(uint8(task.submissionOf(id, sid).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+        // the residual the text states: the fulfiller can terminate and adopt afresh, but the new binding must
+        // again name the publisher, whose suspension right returns with it, and the old record keeps its history
+        vm.prank(worker);
+        reg.terminate(b, bytes32(0));
+        bytes32 fresh = selfAdoptWithIntervener(worker, keccak256("w-fresh"), taskPublisher, T.RIGHT_SUSPEND);
+        (T.Verdict v2, bytes32[] memory ids,) = a.evaluate(worker);
+        assertVerdict(v2, T.Verdict.Satisfied);
+        assertEq(ids[0], fresh);
+        assertEq(uint8(reg.bindingOf(b).state), uint8(T.BindingState.Terminated));
+        vm.prank(taskPublisher);
+        reg.suspend(fresh, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report, again"));
+        (T.Verdict v3,,) = a.evaluate(worker);
+        assertVerdict(v3, T.Verdict.NotSatisfied);
     }
 }
