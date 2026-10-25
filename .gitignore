@@ -5,3 +5,5 @@ broadcast/
 ercs-pr-package/
 *.log
 .env
+deployments/anvil/
+deployments/anvil.json
