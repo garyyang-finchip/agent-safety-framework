@@ -448,4 +448,113 @@ contract ASFCheckTest is ASFBase {
         assertEq(subjectAgent, keccak256(bytes(ref)));
         assertEq(ASFKeys.refScopeKey("x"), keccak256(bytes('{"ref":"x"}')));
     }
+
+    function test_N60_a_standing_stop_applies_to_every_binding_of_the_adopter_for_the_subject_and_specification() public {
+        T.Clause memory naming = clause();
+        naming.interveners = requiring(guardian, T.RIGHT_SUSPEND);
+        T.Clause memory plain = clause();
+
+        // two bindings of the same adopter for the same subject and specification, both naming the guardian
+        bytes32 b1 = adoptAs(user, withGuardian(input(keccak256("b1")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        bytes32 b2 = adoptAs(user, withGuardian(input(keccak256("b2")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        {
+            (T.Verdict v,,) = reg.checkBinding(b2, naming);
+            assertVerdict(v, T.Verdict.Satisfied);
+        }
+        // the guardian suspends the first: the second, Active and untouched, fails the clause that names the
+        // guardian with the stop's response set, and still passes a clause that names nobody
+        vm.prank(guardian);
+        reg.suspend(b1, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY, keccak256("resp"), keccak256("alert"));
+        {
+            (T.Verdict v2, T.Reason r2, uint8 set2) = reg.checkBinding(b2, naming);
+            assertVerdict(v2, T.Verdict.NotSatisfied);
+            assertReason(r2, T.Reason.StoppedByIntervener);
+            assertEq(set2, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY);
+            (T.Verdict vp,,) = reg.checkBinding(b2, plain);
+            assertVerdict(vp, T.Verdict.Satisfied, "a clause that names no intervener is not concerned by the stop");
+        }
+        {
+            // `check` returns the set per clause
+            (T.Verdict vc, T.Reason[] memory rc, uint8[] memory sc) = reg.check(one(naming), ids1(b2));
+            assertVerdict(vc, T.Verdict.NotSatisfied);
+            assertReason(rc[0], T.Reason.StoppedByIntervener);
+            assertEq(sc[0], T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY);
+        }
+        // terminating the stopped record and adopting afresh does not escape the stop; the terminated record
+        // itself reports Terminated, as before
+        vm.prank(user);
+        reg.terminate(b1, keccak256("replaced"));
+        bytes32 fresh = adoptAs(user, withGuardian(input(keccak256("fresh")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        {
+            (T.Verdict vf, T.Reason rf,) = reg.checkBinding(fresh, naming);
+            assertVerdict(vf, T.Verdict.NotSatisfied);
+            assertReason(rf, T.Reason.StoppedByIntervener);
+            (, T.Reason rt,) = reg.checkBinding(b1, naming);
+            assertReason(rt, T.Reason.Terminated);
+        }
+        // the guardian lifts the stop through the terminated record: every sibling is satisfied again
+        vm.prank(guardian);
+        reg.resume(b1, keccak256("alert over"));
+        {
+            (T.Verdict vb2,,) = reg.checkBinding(b2, naming);
+            assertVerdict(vb2, T.Verdict.Satisfied);
+            (T.Verdict vfr,,) = reg.checkBinding(fresh, naming);
+            assertVerdict(vfr, T.Verdict.Satisfied);
+        }
+    }
+
+    function test_N64_a_standing_stop_is_keyed_by_intervener_subject_and_specification_and_checked_in_order() public {
+        T.Clause memory naming = clause();
+        naming.interveners = requiring(guardian, T.RIGHT_SUSPEND);
+        bytes32 b1 = adoptAs(user, withGuardian(input(keccak256("b1")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        vm.prank(guardian);
+        reg.suspend(b1, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("alert"));
+
+        // keyed by the intervener: a clause naming a different suspender is not concerned (the binding grants
+        // nobody the resume right, so neither clause's closed resume right is violated)
+        T.Intervener[] memory iv = new T.Intervener[](2);
+        iv[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        iv[1] = T.Intervener({account: rando, rights: T.RIGHT_SUSPEND});
+        T.BindingInput memory i = input(keccak256("b3"));
+        i.interveners = iv;
+        bytes32 b3 = adoptAs(user, i);
+        {
+            T.Clause memory namingRando = clause();
+            namingRando.interveners = requiring(rando, T.RIGHT_SUSPEND);
+            (T.Verdict v3,,) = reg.checkBinding(b3, namingRando);
+            assertVerdict(v3, T.Verdict.Satisfied);
+            (T.Verdict v3g, T.Reason r3g,) = reg.checkBinding(b3, naming);
+            assertVerdict(v3g, T.Verdict.NotSatisfied);
+            assertReason(r3g, T.Reason.StoppedByIntervener);
+        }
+        // keyed by the subject and the specification: a binding of the same adopter for another subject is not
+        // concerned
+        {
+            T.BindingInput memory other = withGuardian(input(keccak256("other")), T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+            other.subjectKey = ASFKeys.accountSubjectKey(rando);
+            bytes32 b4 = adoptAs(user, other);
+            (T.Verdict v4,,) = reg.checkBinding(b4, naming);
+            assertVerdict(v4, T.Verdict.Satisfied);
+        }
+        // evaluation order: the stop is checked after the required interveners and before the ancestors; a
+        // binding that does not name the guardian fails with IntervenerMismatch first
+        {
+            bytes32 unnamed = adoptAs(user, input(keccak256("unnamed")));
+            (, T.Reason ru,) = reg.checkBinding(unnamed, naming);
+            assertReason(ru, T.Reason.IntervenerMismatch);
+        }
+        // and before the ancestor walk: a derived binding under a suspended root, whose adopter is stopped by the
+        // guardian, reports the stop rather than the parent
+        {
+            bytes32 root = adoptAs(rando, withGuardian(input(keccak256("root")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+            T.BindingInput memory c = withGuardian(input(keccak256("child")), T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+            c.parentBindingId = root;
+            bytes32 child = adoptAs(user, c);
+            vm.prank(guardian);
+            reg.suspend(root, T.RESTRICT_NO_NEW_RISK, bytes32(0), keccak256("root alert"));
+            (, T.Reason rchild, uint8 setchild) = reg.checkBinding(child, naming);
+            assertReason(rchild, T.Reason.StoppedByIntervener);
+            assertEq(setchild, T.RESTRICT_FULL_STOP, "the set of the stop against the adopter, not the parent's");
+        }
+    }
 }

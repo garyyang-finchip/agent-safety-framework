@@ -124,12 +124,12 @@ contract SepoliaEvidence is Script {
 
     /// The tender requires the fulfiller's own adoption of the same specification, account-enforced.
     /// The tender requires the fulfiller's own adoption of Personal Assistant Safety v1, account-enforced, with
-    /// the task publisher (the deployer) named as an intervener holding the suspend right.
+    /// the task publisher (the deployer) named as an intervener holding the suspend and resume rights.
     function _deployAdapter(Core memory c) internal {
         if (c.taskToken == address(0)) c.taskToken = address(new TaskToken("Task Token", "TASK"));
         T.RequirementSet memory tmpl = _oneClause(c.specs, c.spec1, address(0), bytes32(0));
         tmpl.clauses[0].interveners = new T.Intervener[](1);
-        tmpl.clauses[0].interveners[0] = T.Intervener({account: c.deployer, rights: T.RIGHT_SUSPEND});
+        tmpl.clauses[0].interveners[0] = T.Intervener({account: c.deployer, rights: T.RIGHT_SUSPEND | T.RIGHT_RESUME});
         c.adapter = address(new ASFTaskTenderAdapter(ASFBindingRegistry(c.reg), ITaskTenderKernel(c.taskToken), tmpl));
     }
 

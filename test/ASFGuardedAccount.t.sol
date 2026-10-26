@@ -313,4 +313,61 @@ contract ASFGuardedAccountTest is ASFBase {
         vm.expectRevert();
         dacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
     }
+
+    /// A wallet whose requirement names the guardian: the owner (adopter) cannot escape the guardian's stop by
+    /// terminating the stopped binding and presenting a fresh one.
+    function test_N63_a_guardians_stop_follows_the_principal_to_a_fresh_binding_on_the_wallet_path() public {
+        T.Clause memory c = clauseFor(user, subjectAgent, bytes32(0), 1);
+        c.enforcement = T.ENFORCED_ACCOUNT;
+        c.interveners = new T.Intervener[](1);
+        c.interveners[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND | T.RIGHT_RESUME});
+        ASFGuardedAccount gacct = new ASFGuardedAccount(reg, user, agent, one(c));
+        T.BindingInput memory i = input(keccak256("wallet-g"));
+        i.enforcement = T.ENFORCED_ACCOUNT;
+        i = withGuardian(i, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        bytes32 b = adoptAs(user, i);
+        vm.startPrank(user);
+        gacct.presentBindings(ids1(b));
+        gacct.setDeriskAllowed(address(desk), LendingDesk.repay.selector, true);
+        vm.stopPrank();
+        vm.prank(agent);
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (100)));
+
+        // the guardian stops with no new risk + de-risk only
+        vm.prank(guardian);
+        reg.suspend(b, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY, keccak256("resp"), keccak256("alert"));
+        // the owner terminates the stopped binding, adopts afresh (naming the guardian again, as the clause requires)
+        // and presents the fresh binding: new exposure stays blocked, with the stop's own set reported
+        vm.prank(user);
+        reg.terminate(b, keccak256("replaced"));
+        T.BindingInput memory j = input(keccak256("wallet-g-fresh"));
+        j.enforcement = T.ENFORCED_ACCOUNT;
+        j = withGuardian(j, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        bytes32 fresh = adoptAs(user, j);
+        vm.prank(user);
+        gacct.presentBindings(ids1(fresh));
+        (T.Verdict v, T.Reason[] memory reasons, uint8[] memory sets) = gacct.status();
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.StoppedByIntervener);
+        assertEq(sets[0], T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY);
+        assertEq(reg.bindingOf(fresh).restrictions, 0, "the fresh record itself carries no set");
+        vm.prank(agent);
+        vm.expectRevert();
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        // ...while repayment, a de-risking call, still goes through under the stop's set
+        vm.prank(agent);
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (40)));
+        assertEq(desk.debt(address(gacct)), 60);
+        // the owner cannot lift the stop; the guardian lifts it through the terminated record and the wallet reopens
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(b, bytes32(0));
+        vm.prank(guardian);
+        reg.resume(b, keccak256("alert over"));
+        (T.Verdict v2,,) = gacct.status();
+        assertVerdict(v2, T.Verdict.Satisfied);
+        vm.prank(agent);
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        assertEq(desk.debt(address(gacct)), 61);
+    }
 }
