@@ -1,6 +1,6 @@
 # Test record
 
-`forge test`: 84 tests, 0 failures (solc 0.8.30, optimizer 200 runs, via IR; the suite also passes with `via_ir = false`). The binding registry's check runs in the externally linked library `ASFEvaluation`, so the suite exercises the registry through the library exactly as it is deployed. 58 of them are negative conformance scenarios, numbered N01–N58 in the test names (N49–N56 were added in revision 3 for the findings of the first public review: response sets over derivation chains, required interveners, and the rule that an intervener's suspension is not the adopter's to lift; N57–N58 in revision 4 for the closed resume right, after the second review). Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
+`forge test`: 90 tests, 0 failures (solc 0.8.30, optimizer 200 runs, via IR; the suite also passes with `via_ir = false`). The binding registry's check runs in the externally linked library `ASFEvaluation` and its writes in `ASFLifecycle`, so the suite exercises the registry through the libraries exactly as it is deployed. 64 of them are negative conformance scenarios, numbered N01–N64 in the test names (N49–N56 were added in revision 3 for the findings of the first public review: response sets over derivation chains, required interveners, and the rule that an intervener's suspension is not the adopter's to lift; N57–N58 in revision 4 for the closed resume right, after the second review; N59–N64 in revision 6 for the standing stops, after the third review: a stop applies to the adopter for the subject and the specification, not to one binding identifier). Tool tests (`npm run test:tools`): 4 tests. Example pipeline (`npm run check`): 16 example documents validated against 5 schemas, manifest re-checked, vectors regenerated (interface ids, identifiers, keys, canonicalization, specification id, binding id, requirement id, response requirement bits, example hashes).
 
 ## Group 1 — Safety Specification registry (`test/ASFSpecificationRegistry.t.sol`)
 
@@ -35,6 +35,7 @@
 - `test_N21_child_window_cannot_exceed_the_parent`
 - `test_N22_depth_is_bounded`
 - `test_N49_an_interveners_suspension_is_lifted_only_by_an_intervener_holding_the_right` (guardian suspends: adopter cannot resume, executor with the right can; the adopter's own suspension is lifted by the adopter or by an intervener with the right; the executor's suspension cannot be lifted by the adopter or a suspend-only guardian)
+- `test_N59_an_interveners_suspension_is_a_standing_stop_that_outlives_the_record` (the adopter's own suspension records no stop; the guardian's records one keyed by adopter, subject, specification and guardian, with set, response reference and time; other keys carry nothing; termination keeps the record's suspension fields and leaves the stop standing; the adopter and a stranger cannot lift it through the terminated record, the guardian can with `StopLifted` while the record stays Terminated; a second lift is an invalid transition; a resumption lifts the stop recorded through the binding; a terminated record never stopped by an intervener has nothing to lift)
 - `test_adopter_is_msg_sender_and_record_is_complete`
 - `test_backdated_validFrom_is_recorded_but_adoption_starts_at_creation`
 - `test_derived_binding_pins_the_same_version_and_inherits_depth`
@@ -58,6 +59,8 @@
 - `test_N50_response_sets_in_force_are_the_union_of_the_chain_and_empty_when_the_chain_is_broken` (root set reaches a grandchild; child and root sets unite; a full stop anywhere is in the union; a terminated or expired record empties it)
 - `test_N51_required_interveners_must_be_named_with_at_least_the_required_rights` (named account, rights subset, the adopter never counts, a zero account is a malformed requirement, several required interveners, malformed rights revert)
 - `test_N57_a_clause_that_names_interveners_closes_the_resume_right` (an unnamed holder of the resume right fails the clause; unnamed suspend-only or terminate-only interveners are allowed; a named account may hold more; the escalation shape with a named suspender and a named executor; no constraint without required interveners)
+- `test_N60_a_standing_stop_applies_to_every_binding_of_the_adopter_for_the_subject_and_specification` (a sibling binding fails the clause naming the guardian with `StoppedByIntervener` and the stop's set and passes a clause naming nobody; `check` returns the set per clause; a fresh binding after termination fails the same way while the terminated record reports `Terminated`; the guardian's lift through the terminated record satisfies every sibling again)
+- `test_N64_a_standing_stop_is_keyed_by_intervener_subject_and_specification_and_checked_in_order` (a clause naming a different suspender is not concerned, nor is a binding for another subject; the stop is checked after the required interveners and before the ancestors)
 - `test_satisfied_clause_reports_no_reason`
 - `test_subject_and_scope_keys_match_the_reference_derivation`
 
@@ -75,6 +78,7 @@
 - `test_N52_a_parents_derisk_only_suspension_keeps_the_derived_bindings_unwinding_open` (the account requires the agent's binding derived from the principal's root; a de-risk-only suspension of the root blocks borrow and keeps repay and cancel open although the derived record carries no set; the guardian's resume reopens)
 - `test_N53_a_parents_full_stop_or_termination_closes_the_derived_bindings_derisking_path` (full stop on the root closes repay; termination reports `ParentNotSatisfied` with an empty set and closes everything)
 - `test_N54_sets_of_the_child_and_of_the_parent_combine_and_full_stop_dominates`
+- `test_N63_a_guardians_stop_follows_the_principal_to_a_fresh_binding_on_the_wallet_path` (the account's requirement names the guardian; after the guardian's de-risk-only suspension the principal terminates and presents a fresh binding: new exposure stays blocked with `StoppedByIntervener` and the stop's set, repayment stays open, the principal cannot lift, the guardian's lift through the terminated record reopens the wallet)
 - `test_operator_acts_while_the_binding_is_satisfied`
 - `test_requirement_is_fixed_at_deployment`
 
@@ -88,7 +92,9 @@
 - `test_N46_adapter_requires_the_authority_and_a_pending_judged_submission`
 - `test_N47_template_may_not_pre_bind_adopter_or_subject`
 - `test_N55_a_fulfiller_whose_binding_does_not_name_the_required_intervener_is_rejected` (clause requires the task publisher with the suspend right: a binding under the fulfiller's sole control is rejected with `IntervenerMismatch`, one naming the publisher is accepted)
-- `test_N56_the_publishers_suspension_is_not_the_fulfillers_to_lift_before_judgment` (the fulfiller's resume reverts; judgment rejects; a fresh binding naming the publisher is admitted and can be suspended again)
+- `test_N56_the_publishers_suspension_is_not_the_fulfillers_to_lift_before_judgment` (the fulfiller's resume reverts; judgment rejects; a fresh binding adopted after terminating the suspended one is refused with `StoppedByIntervener`, the terminated record keeps `suspendedBy`, and with a suspend-only publisher nobody can lift the stop)
+- `test_N61_a_sibling_binding_does_not_escape_the_publishers_stop` (two bindings naming the publisher; the publisher suspends one; the other, Active and untouched, reports `StoppedByIntervener`; judgment by the fulfiller itself rejects; a third binding adopted after the stop is refused too)
+- `test_N62_the_publishers_stop_follows_the_fulfiller_until_the_publisher_lifts_it` (publisher named with suspend and resume; terminate-and-readopt is rejected with the stop's set; the fulfiller cannot lift through the terminated record; the publisher lifts it there, the fresh binding is admitted and paid, and a new suspension re-points the stop at it)
 - `test_N58_a_fulfiller_cannot_keep_a_resume_key_of_its_own_beside_the_required_intervener` (the puppet-key binding is rejected with `IntervenerMismatch` before any suspension; with a clause naming publisher and executor, the executor lifts the publisher's stop, the fulfiller cannot, and the fulfiller is then accepted)
 - `test_fulfiller_with_binding_is_accepted_and_paid_through_the_real_kernel`
 - `test_requirement_for_a_fulfiller_fills_adopter_and_subject`
@@ -99,7 +105,7 @@
 
 - `test_canonicalization_vector`
 - `test_identifier_hashes`
-- `test_interface_ids_match_the_vectors` (`IASFSpecificationRegistry` `0x9bddde77`, `IASFBindingRegistry` `0x1ff33bef`)
+- `test_interface_ids_match_the_vectors` (`IASFSpecificationRegistry` `0x9bddde77`, `IASFBindingRegistry` `0x2db6eb8a`)
 - `test_keys_match_the_on_chain_derivation`
 - `test_requirement_id_matches_the_registry` (three clauses, the third with two required interveners: a suspender and a resume holder)
 - `test_spec_and_binding_ids_follow_the_abi_encoding`
@@ -110,4 +116,4 @@
 
 ## Sepolia run
 
-The same 36 transactions were executed on Sepolia on 2026-10-26 (blocks 11994931 to 11995051), all with status 1, against the live TASK-KERNEL v3.0 `TaskToken` at `0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7` (task #20). Every observation of the rehearsal was reproduced on chain and read back after the run: the guard loop's refusals carry `BindingNotSatisfied(NotSatisfied, [Suspended])` in the probe's `Attempt` events, the adapter's `Judged` events show `Satisfied` with the worker's binding for submission 1 and `NotSatisfied` / `NoBinding` for submission 2, the derived member binding checks `ParentNotSatisfied` with an empty response set after the charter's termination while its record stays `Active`, and version 1 of the swarm specification is deprecated. The seven contracts are verified on Sourcify from the standard JSON input. Record: `docs/sepolia-evidence.md`, `deployments/sepolia.json`, `deployments/sepolia.transactions.json`.
+The same 36 transactions (revision 5 of the contracts, interface identifier `0x1ff33bef`) were executed on Sepolia on 2026-10-26 (blocks 11994931 to 11995051), all with status 1, against the live TASK-KERNEL v3.0 `TaskToken` at `0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7` (task #20). Every observation of the rehearsal was reproduced on chain and read back after the run: the guard loop's refusals carry `BindingNotSatisfied(NotSatisfied, [Suspended])` in the probe's `Attempt` events, the adapter's `Judged` events show `Satisfied` with the worker's binding for submission 1 and `NotSatisfied` / `NoBinding` for submission 2, the derived member binding checks `ParentNotSatisfied` with an empty response set after the charter's termination while its record stays `Active`, and version 1 of the swarm specification is deprecated. The seven contracts are verified on Sourcify from the standard JSON input. Record: `docs/sepolia-evidence.md`, `deployments/sepolia.json`, `deployments/sepolia.transactions.json`.

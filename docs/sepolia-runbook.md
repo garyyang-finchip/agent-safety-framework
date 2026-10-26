@@ -8,7 +8,7 @@ The evidence run exercises the whole framework on Sepolia with the worked exampl
 
 Prerequisites: Foundry, Node 22, `npm install`, a Sepolia RPC URL, the deployer funded with at least 0.05 Sepolia ETH (the run used 0.0072 ETH in fees at a 0.1 gwei priority fee, plus the 0.018 ETH it forwards to the two other keys and the 0.002 ETH that funds the tender).
 
-Sepolia's gas schedule since the Glamsterdam upgrade (2026-10-06) prices state and code roughly ten times higher than Anvil's default schedule, and a transaction may use at most 16,777,216 gas (EIP-7825). Two consequences for this run: gas limits must come from live estimates, never from an Anvil rehearsal (the first Sepolia attempt of this run, sent with Anvil's limit, ran out of gas); and the binding registry delegates its check to the externally linked library `ASFEvaluation`, which `forge script` deploys through the deterministic CREATE2 factory before the registry, because the registry's deployment alone takes about 15.1 million gas, 90% of the cap. Deployment cost grows by about 1,400 gas per byte of deployed code, so any change that grows the registry's code should be checked against the cap with `eth_estimateGas` before a run.
+Sepolia's gas schedule since the Glamsterdam upgrade (2026-10-06) prices state and code roughly ten times higher than Anvil's default schedule, and a transaction may use at most 16,777,216 gas (EIP-7825). Two consequences for this run: gas limits must come from live estimates, never from an Anvil rehearsal (the first Sepolia attempt of this run, sent with Anvil's limit, ran out of gas); and the binding registry delegates its check to the externally linked library `ASFEvaluation` and, since revision 6, its writes to `ASFLifecycle`; `forge script` deploys the libraries through the deterministic CREATE2 factory before the registry. The revision-5 registry alone took about 15.1 million gas to deploy, 90% of the cap; the revision-6 registry is about 7.2 KB of runtime code (an estimated 11.5 million gas) with the two libraries at about 3.9 KB and 5.1 KB. Deployment cost grows by about 1,400 gas per byte of deployed code, so any change that grows a contract's code should be checked against the cap with `eth_estimateGas` before a run.
 
 ```
 export SEPOLIA_RPC_URL=...
@@ -28,7 +28,7 @@ mkdir -p deployments/sepolia && echo '{}' > deployments/sepolia.json
 forge script script/SepoliaEvidence.s.sol --sig "deployCore()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-Deploys the `ASFEvaluation` library (through the CREATE2 factory, so its address does not depend on the deployer's nonce), `ASFSpecificationRegistry`, `ASFBindingRegistry` linked to the library, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend right. Writes `deployments/sepolia.json`.
+Deploys the `ASFEvaluation` and `ASFLifecycle` libraries (through the CREATE2 factory, so their addresses do not depend on the deployer's nonce), `ASFSpecificationRegistry`, `ASFBindingRegistry` linked to both, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend and resume rights. Writes `deployments/sepolia.json`.
 
 ## Phase 2: relink the examples with the real addresses
 
@@ -51,7 +51,7 @@ Commit and push `deployments/sepolia/examples` before phase 3 so that `LOCATOR_B
 forge script script/SepoliaEvidence.s.sol --sig "publishAndAdopt()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-Publishes the two specifications (the script checks that the on-chain `specId` equals the manifest's), creates the principal's binding for the agent on the guarded account (guardian may suspend and resume) and presents it to the account, the organizer's binding for the swarm, the agent's derived member binding, and the agent's own worker binding (which names the deployer as an intervener with the suspend right, as the tender requires). Interveners are read from the relinked manifest. Binding identifiers are written to the deployments file.
+Publishes the two specifications (the script checks that the on-chain `specId` equals the manifest's), creates the principal's binding for the agent on the guarded account (guardian may suspend and resume) and presents it to the account, the organizer's binding for the swarm, the agent's derived member binding, and the agent's own worker binding (which names the deployer as an intervener with the suspend and resume rights, as the tender requires). Interveners are read from the relinked manifest. Binding identifiers are written to the deployments file.
 
 ## Phase 4: guard loop
 
