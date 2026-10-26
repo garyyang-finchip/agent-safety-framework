@@ -1,8 +1,8 @@
-# Agent Safety and Security Framework (ASF)
+# Agent Safety Framework (ASF)
 
-Reference repository of the draft ERC **Agent Safety and Security Framework**: a registry model through which the safety and security arrangements that govern autonomous systems (agents, swarms, economic units, any referenceable system) become protocol objects with a source, a version, a scope, an attributable adoption relation and a lifecycle.
+Reference repository of the draft ERC **Agent Safety Framework (ASF)**: a registry model through which the safety arrangements that govern autonomous systems (agents, swarms, economic units, any referenceable system) become protocol objects with a source, a version, a scope, an attributable adoption relation and a lifecycle.
 
-Status: Draft, filed as [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) under the placeholder number 9999; discussion thread on [Ethereum Magicians (topic 30073)](https://ethereum-magicians.org/t/draft-erc-agent-safety-framework-asf-a-registry-of-versioned-safety-specifications-and-of-the-scoped-attributable-adoption-relations-that-bind-agents-to-them/30073). This repository holds revision 5 of the draft (v0.6). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested, and the evidence run has been executed on Sepolia (36 transactions, all successful, contracts verified; see below).
+Status: Draft, filed as [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) under the placeholder number 9999; discussion thread on [Ethereum Magicians (topic 30073)](https://ethereum-magicians.org/t/draft-erc-agent-safety-framework-asf-a-registry-of-versioned-safety-specifications-and-of-the-scoped-attributable-adoption-relations-that-bind-agents-to-them/30073). This repository holds revision 5 of the draft (v0.6.1). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested, and the evidence run has been executed on Sepolia (36 transactions, all successful, contracts verified; see below).
 
 ## What it is
 

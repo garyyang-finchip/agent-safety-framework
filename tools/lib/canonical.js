@@ -1,5 +1,5 @@
 'use strict';
-// Canonicalization, identifiers and ABI helpers of the Agent Safety and Security Framework.
+// Canonicalization, identifiers and ABI helpers of the Agent Safety Framework.
 const canonicalize = require('canonicalize');
 const { keccak256, toUtf8Bytes, AbiCoder, Interface, getAddress } = require('ethers');
 

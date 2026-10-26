@@ -13,7 +13,7 @@ import {OperatorProbe, LendingDesk, IGuardedAccountLike} from "./helpers/Operato
 import {TaskToken} from "../test/fixtures/task-token/TaskToken.sol";
 import {ITaskTender} from "../test/fixtures/task-token/interfaces/ITaskTender.sol";
 
-/// @notice Evidence run of the Agent Safety and Security Framework reference implementation (Sepolia, rehearsed on Anvil).
+/// @notice Evidence run of the Agent Safety Framework reference implementation (Sepolia, rehearsed on Anvil).
 ///
 /// Three keys take part: PRIVATE_KEY (deployer; plays the principal, the specification publisher, the swarm
 /// organizer and the task publisher), AGENT_PK (the assistant / worker / swarm member A), GUARDIAN_PK (the
