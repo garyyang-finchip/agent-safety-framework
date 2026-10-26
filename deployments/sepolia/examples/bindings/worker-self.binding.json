@@ -1,0 +1,109 @@
+{
+  "asf": "1.0",
+  "kind": "safety-binding",
+  "adopter": {
+    "ref": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+    "role": "worker agent (self-adoption)"
+  },
+  "subject": {
+    "ref": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+    "kind": "worker agent account",
+    "key": "0x10c46d6e66c66fda3fdb02443d1dfbc8f8fb8750e105fc89704db2fab36706da"
+  },
+  "scope": {
+    "object": {
+      "ref": "task-tenders"
+    },
+    "key": "0x31a55b0844b606a621484e4f2142b3b9de9547ae87ad1f5918a2efa1844a45ca"
+  },
+  "specification": {
+    "registry": "eip155:11155111:0x1939665f5905d0d9135da4f27e36f1b8c84e014b",
+    "specId": "0x9a6fdb5d3c923d152c70b099de725b3a672b851b8c10978bbe651fa8b383e30d",
+    "version": 1,
+    "contentHash": "0x092ea14bf5666dad189272bd14018f213eeed75411d897b610b718f2da73a40b",
+    "locator": "ipfs://example/personal-assistant-safety.v1.json",
+    "name": "Personal Assistant Safety"
+  },
+  "parameters": {
+    "asf:profile:authority/bounded-spend@1": {
+      "denomination": "eip155:11155111/slip44:60",
+      "perActionCap": "0.01",
+      "windowCap": "0.05",
+      "windowSeconds": 86400,
+      "aboveCapRequires": "refuse"
+    },
+    "asf:profile:information/untrusted-input@1": {
+      "untrustedSources": [
+        "task documents",
+        "tool outputs",
+        "messages from other agents"
+      ],
+      "instructionAuthority": "authorization-records-only",
+      "disclosure": {
+        "allowedRecipients": [
+          "the task publisher"
+        ],
+        "allowedPurposes": [
+          "the current tender"
+        ]
+      }
+    },
+    "asf:profile:governance/intervention@1": {
+      "interveners": [
+        {
+          "role": "worker",
+          "rights": [
+            "suspend",
+            "resume",
+            "terminate"
+          ],
+          "basis": "self"
+        },
+        {
+          "role": "task publisher",
+          "rights": [
+            "suspend"
+          ],
+          "basis": "tender admission requirement"
+        }
+      ],
+      "allowedModes": [
+        "no-new-risk",
+        "full-stop"
+      ],
+      "dispute": "the tender's acceptance authority",
+      "recovery": "the worker resumes its own suspensions after review; a suspension by the task publisher is lifted by the publisher or by termination and a fresh adoption"
+    }
+  },
+  "authorityBasis": [
+    {
+      "kind": "self",
+      "ref": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+      "description": "the worker binds its own account; no delegated authority is involved"
+    }
+  ],
+  "mechanisms": [
+    {
+      "channel": "account-permission",
+      "mechanism": {
+        "kind": "wallet-permission",
+        "ref": "worker account spend module"
+      },
+      "location": "account",
+      "coverage": "full"
+    }
+  ],
+  "interveners": [
+    {
+      "ref": "eip155:11155111:0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+      "rights": [
+        "suspend"
+      ],
+      "role": "task publisher"
+    }
+  ],
+  "metadata": {
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000041",
+    "note": "The worker's own commitment that a tender's acceptance authority can require (adopter == subject). The task publisher is named as an intervener with the suspend right, as the tender admission requirement demands; the worker cannot lift the publisher's suspension."
+  }
+}

@@ -1,12 +1,14 @@
 # Sepolia evidence runbook
 
-The evidence run exercises the whole framework on Sepolia with the worked examples and the two closed-loop consumers. It was rehearsed end to end on a local Anvil chain (36 transactions across five phases). Three keys take part:
+The evidence run exercises the whole framework on Sepolia with the worked examples and the two closed-loop consumers. It was rehearsed end to end on a local Anvil chain and executed on Sepolia on 2026-10-26 (36 transactions across five phases, all successful); the results, addresses and transaction hashes are in `docs/sepolia-evidence.md` and `deployments/`. Three keys take part:
 
 - **Deployer** (`PRIVATE_KEY`): deploys everything, plays the specification publisher, the principal of the guarded account, the swarm organizer and the task publisher; funds the two other keys; pays most gas.
-- **Agent** (`AGENT_PK`): the assistant operating the guarded account (through the operator probe), swarm member A, and the worker who fulfills the tender. Receives 0.004 ETH from the deployer in phase 1.
-- **Guardian** (`GUARDIAN_PK`): may suspend and resume the principal's binding (the example names it with both rights, because a suspension it records cannot be lifted by the principal); also submits to the tender as the unbound account. Receives 0.002 ETH in phase 1.
+- **Agent** (`AGENT_PK`): the assistant operating the guarded account (through the operator probe), swarm member A, and the worker who fulfills the tender. Receives 0.012 ETH from the deployer in phase 1.
+- **Guardian** (`GUARDIAN_PK`): may suspend and resume the principal's binding (the example names it with both rights, because a suspension it records cannot be lifted by the principal); also submits to the tender as the unbound account. Receives 0.006 ETH in phase 1.
 
-Prerequisites: Foundry, Node 22, `npm install`, a Sepolia RPC URL, the deployer funded with at least 0.05 Sepolia ETH. Take every gas limit from live estimates: Sepolia's current schedule costs several times Anvil's.
+Prerequisites: Foundry, Node 22, `npm install`, a Sepolia RPC URL, the deployer funded with at least 0.05 Sepolia ETH (the run used 0.0072 ETH in fees at a 0.1 gwei priority fee, plus the 0.018 ETH it forwards to the two other keys and the 0.002 ETH that funds the tender).
+
+Sepolia's gas schedule since the Glamsterdam upgrade (2026-10-06) prices state and code roughly ten times higher than Anvil's default schedule, and a transaction may use at most 16,777,216 gas (EIP-7825). Two consequences for this run: gas limits must come from live estimates, never from an Anvil rehearsal (the first Sepolia attempt of this run, sent with Anvil's limit, ran out of gas); and the binding registry delegates its check to the externally linked library `ASFEvaluation`, which `forge script` deploys through the deterministic CREATE2 factory before the registry, because the registry's deployment alone takes about 15.1 million gas, 90% of the cap. Deployment cost grows by about 1,400 gas per byte of deployed code, so any change that grows the registry's code should be checked against the cap with `eth_estimateGas` before a run.
 
 ```
 export SEPOLIA_RPC_URL=...
@@ -26,7 +28,7 @@ mkdir -p deployments/sepolia && echo '{}' > deployments/sepolia.json
 forge script script/SepoliaEvidence.s.sol --sig "deployCore()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-Deploys `ASFSpecificationRegistry`, `ASFBindingRegistry`, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend right. Writes `deployments/sepolia.json`.
+Deploys the `ASFEvaluation` library (through the CREATE2 factory, so its address does not depend on the deployer's nonce), `ASFSpecificationRegistry`, `ASFBindingRegistry` linked to the library, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend right. Writes `deployments/sepolia.json`.
 
 ## Phase 2: relink the examples with the real addresses
 
@@ -97,6 +99,10 @@ done
 
 `deployments/anvil*` is a rehearsal record and is not kept in the repository.
 
+## Execution against Sepolia
+
+`forge script ... --broadcast` against a Sepolia RPC runs each phase in order and takes its gas limits from the node's estimates. The run recorded here was executed differently, for the reason given above: after the first attempt ran out of gas, the transactions of all phases were produced against a local Anvil mirror of the Sepolia state (chain id 11155111, the live `TaskToken` code and storage, the three accounts at their live nonces), signed at those nonces with gas limits taken from live estimates, and relayed to Sepolia as raw transactions, phase by phase, with every transaction whose effect depends on the order of two senders confirmed before the next was sent. Calldata and addresses are identical either way; `docs/sepolia-evidence.md` and `deployments/sepolia.transactions.json` state the execution path next to the receipts.
+
 ## Record
 
-After the run: copy the broadcast records' transaction hashes, block numbers and gas into `docs/sepolia-evidence.md`, verify the seven contracts on Sourcify or Etherscan from the standard JSON input, and update the address table in `README.md`. The three keys are session-generated; the deployer keeps publishing control of the two specifications and the adopter role of the principal's and organizer's bindings until a later round moves them.
+The record of the run is `deployments/sepolia.json` (addresses and identifiers), `deployments/sepolia.transactions.json` (every transaction with hash, block, status, gas and effective price, the failed first attempt, and the Sourcify verification) and `docs/sepolia-evidence.md` (the phases, the decoded events, the state read back after the run, and how to reproduce the checks). The seven contracts were verified on Sourcify from the standard JSON input with the library linked at its address; `README.md` carries the address table. The three keys are session-generated; the deployer keeps publishing control of the two specifications and the adopter role of the principal's and organizer's bindings until a later round moves them.
