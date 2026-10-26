@@ -12,6 +12,11 @@ import {IASFBindingRegistry} from "asf/interfaces/IASFBindingRegistry.sol";
 
 /// Shared fixture: two registries, one published specification (v1), helper builders.
 abstract contract ASFBase is Test {
+    /// Block time at the start of every test (the fixture warps to it in setUp). Tests that move time derive
+    /// their targets from this constant rather than from `block.timestamp`, which the via-IR pipeline may treat
+    /// as invariant within a call.
+    uint256 internal constant START = 1_760_000_000;
+
     ASFSpecificationRegistry specs;
     ASFBindingRegistry reg;
 
@@ -29,7 +34,7 @@ abstract contract ASFBase is Test {
     bytes32 scopeWallet;
 
     function setUp() public virtual {
-        vm.warp(1_760_000_000);
+        vm.warp(START);
         specs = new ASFSpecificationRegistry();
         reg = new ASFBindingRegistry();
         bytes32[] memory profiles = new bytes32[](1);

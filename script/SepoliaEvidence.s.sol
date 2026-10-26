@@ -94,8 +94,8 @@ contract SepoliaEvidence is Script {
         _deployRegistries(c);
         _deployGuard(c);
         _deployAdapter(c);
-        payable(c.agent).transfer(0.004 ether);
-        payable(c.guardian).transfer(0.002 ether);
+        payable(c.agent).transfer(0.012 ether);
+        payable(c.guardian).transfer(0.006 ether);
         vm.stopBroadcast();
         _recordCore(c);
     }

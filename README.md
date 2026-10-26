@@ -2,7 +2,7 @@
 
 Reference repository of the draft ERC **Agent Safety and Security Framework**: a registry model through which the safety and security arrangements that govern autonomous systems (agents, swarms, economic units, any referenceable system) become protocol objects with a source, a version, a scope, an attributable adoption relation and a lifecycle.
 
-Status: Draft, filed as [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) under the placeholder number 9999; discussion thread on [Ethereum Magicians (topic 30073)](https://ethereum-magicians.org/t/draft-erc-agent-safety-framework-asf-a-registry-of-versioned-safety-specifications-and-of-the-scoped-attributable-adoption-relations-that-bind-agents-to-them/30073). This repository holds revision 4 of the draft (v0.5). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested; the Sepolia evidence run is prepared (see below).
+Status: Draft, filed as [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) under the placeholder number 9999; discussion thread on [Ethereum Magicians (topic 30073)](https://ethereum-magicians.org/t/draft-erc-agent-safety-framework-asf-a-registry-of-versioned-safety-specifications-and-of-the-scoped-attributable-adoption-relations-that-bind-agents-to-them/30073). This repository holds revision 5 of the draft (v0.6). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested, and the evidence run has been executed on Sepolia (36 transactions, all successful, contracts verified; see below).
 
 ## What it is
 
@@ -27,7 +27,8 @@ ERCS/erc-asf.md                      ERC text (source; the filing package names 
 assets/erc-asf/
   contracts/                         ASFSpecificationRegistry, ASFBindingRegistry, ASFTypes, ASFErrors,
                                      interfaces/ (incl. the vendored ITaskTenderKernel subset),
-                                     libraries/ (ASFKeys, ASFRequirementLib),
+                                     libraries/ (ASFKeys, ASFRequirementLib, ASFEvaluation: the registry's
+                                     check as an externally linked library),
                                      examples/ASFGuardedAccount, adapters/ASFTaskTenderAdapter
   schemas/                           JSON Schemas (safety specification, safety binding, requirement set,
                                      intervention response, profile descriptor, common)
@@ -41,7 +42,9 @@ tools/                               build-examples.js, vectors.js, validate.js,
                                      test/ (node --test)
 script/SepoliaEvidence.s.sol         evidence run (deploy, publish, adopt, guard loop, tender loop, lifecycle)
 scripts/make-filing-package.py       builds ercs-pr-package/ for the ethereum/ERCs pull request
-docs/                                design memo, Magicians post and revision note, test record, Sepolia runbook
+deployments/                         Sepolia record: addresses and identifiers, the 36 transactions, the relinked examples
+docs/                                design memo, Magicians post and revision notes, test record, Sepolia runbook
+                                     and evidence record
 ```
 
 ## Build and test
@@ -55,7 +58,7 @@ npm run lint:erc       # eipw lint of the ERC text (spelling findings are listed
 python3 scripts/make-filing-package.py --number 9999   # --discussions-to <URL> overrides the thread URL
 ```
 
-`forge` needs solc 0.8.30 (downloaded automatically) and the vendored `lib/forge-std` (1.9.7).
+`forge` needs solc 0.8.30 (downloaded automatically) and the vendored `lib/forge-std` (1.9.7). The project compiles via IR (`via_ir = true` in `foundry.toml`): the binding registry delegates its check to the externally linked library `ASFEvaluation`, which keeps the registry's deployed code within the per-transaction gas cap of networks that price code deposit heavily (see `docs/sepolia-evidence.md`); the interface, the identifiers and the test results are unchanged by the split.
 
 ## Identifiers
 
@@ -77,7 +80,20 @@ The framework is designed to sit on top of existing and emerging agent standards
 
 ## Sepolia
 
-The evidence run (`script/SepoliaEvidence.s.sol`) deploys both registries, publishes the two example specifications, creates the example bindings (including the derived member binding), exercises the guarded-account loop (execute, the guardian suspends with its de-risk-only response, de-risk call passes, new exposure reverts, the guardian resumes) and the tender loop against the live TASK-KERNEL v3.0 `TaskToken` on Sepolia, then the lifecycle phase (the principal's full-stop response, charter termination, derived binding reporting `ParentNotSatisfied`, deprecation), and records addresses, transactions and decoded state under `deployments/`. See `docs/sepolia-runbook.md`.
+The evidence run (`script/SepoliaEvidence.s.sol`) was executed on Sepolia on 2026-10-26 (blocks 11994931 to 11995051): it deployed both registries, published the two example specifications, created the example bindings (including the derived member binding), exercised the guarded-account loop (execute, the guardian suspends with its de-risk-only response, the de-risk call passes, new exposure reverts, the guardian resumes) and the tender loop against the live TASK-KERNEL v3.0 `TaskToken` (the bound worker accepted and paid, the unbound submitter rejected), then the lifecycle phase (the principal's full-stop response refuses even repayment, charter termination, the derived binding reporting `ParentNotSatisfied`, deprecation). 36 transactions, all successful. The record is in `deployments/` and `docs/sepolia-evidence.md`; the procedure in `docs/sepolia-runbook.md`.
+
+| Contract | Sepolia address |
+|---|---|
+| `ASFSpecificationRegistry` | `0x1939665F5905d0d9135Da4f27e36f1B8c84E014b` |
+| `ASFBindingRegistry` | `0xc3e1A1Cb021Ab96EBBeD3279018840016114A5c4` |
+| `ASFEvaluation` (library linked by the binding registry) | `0x663B84f1BfcE37bE4a78358b0301B5d5E5079269` |
+| `ASFGuardedAccount` | `0x40AaD5106A7a13B15892E53099f6bD06bCF80aD3` |
+| `OperatorProbe` | `0xD68B1bB09399Ca6acc802Bf2E2A4346ec810da77` |
+| `LendingDesk` | `0x78A466eb7A5FB8E101b02bf3EAee9E6f9C701d9E` |
+| `ASFTaskTenderAdapter` | `0x51772fabFB757Fb5A4186c0435Ec4fa76D75CE4e` |
+| `TaskToken` (live TASK-KERNEL v3.0, consumed) | `0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7` |
+
+All seven deployed contracts are verified on Sourcify (runtime and creation match; solc 0.8.30, optimizer 200 runs, via IR). Specification identifiers: Personal Assistant Safety v1 `0x9a6fdb5d…e30d`, Swarm Shared Funds v1 `0xb4ca2e72…e07a` (full values in `deployments/sepolia.json`).
 
 ## License
 

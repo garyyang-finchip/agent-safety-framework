@@ -42,19 +42,20 @@ contract ASFCheckTest is ASFBase {
     }
 
     function test_N25_time_window_is_half_open() public {
+        uint256 t0 = START;
         T.BindingInput memory i = input(keccak256("b"));
-        i.validFrom = uint64(block.timestamp + 1 days);
-        i.validUntil = uint64(block.timestamp + 2 days);
+        i.validFrom = uint64(t0 + 1 days);
+        i.validUntil = uint64(t0 + 2 days);
         bytes32 id = adoptAs(user, i);
         (T.Verdict v, T.Reason r,) = reg.checkBinding(id, clause());
         assertReason(r, T.Reason.NotYetValid);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(t0 + 1 days);
         (v, r,) = reg.checkBinding(id, clause());
         assertVerdict(v, T.Verdict.Satisfied);
-        vm.warp(block.timestamp + 1 days - 1);
+        vm.warp(t0 + 2 days - 1);
         (v, r,) = reg.checkBinding(id, clause());
         assertVerdict(v, T.Verdict.Satisfied);
-        vm.warp(block.timestamp + 1); // == validUntil: exclusive end
+        vm.warp(t0 + 2 days); // == validUntil: exclusive end
         (v, r,) = reg.checkBinding(id, clause());
         assertReason(r, T.Reason.Expired);
     }
