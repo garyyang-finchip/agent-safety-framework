@@ -1,6 +1,6 @@
 # Sepolia evidence run
 
-This record is of revision 5 of the reference implementation (`IASFBindingRegistry` `0x1ff33bef`, one linked library). Revision 6 changed the registry and its libraries (standing stops, Section 8.5 of the text) and is not part of this run.
+This record is of revision 5 of the reference implementation (`IASFBindingRegistry` `0x1ff33bef`, one linked library). Revisions 6 and 7 changed the registry and its libraries (standing stops, Section 8.5 of the text) and are not part of this run; a second run with the current contracts is prepared.
 
 The evidence run of `script/SepoliaEvidence.s.sol` was executed on Sepolia on 2026-10-26 between blocks 11994931 (02:13:48 UTC) and 11995051 (02:38:00 UTC): 36 transactions across the five phases of the runbook, all with status 1, 72,160,025 gas in total, 0.00722 ETH in fees at a priority fee of 0.1 gwei over a base fee of a few tens of wei. The machine-readable record with every transaction hash, block, gas and effective price is `deployments/sepolia.transactions.json`; the addresses and identifiers written by the phases are `deployments/sepolia.json`; the example documents whose hashes went on chain are `deployments/sepolia/examples/`, served from this repository as the specification and parameter locators.
 

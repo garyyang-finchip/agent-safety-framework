@@ -299,10 +299,16 @@ contract ASFAdapter8414Test is ASFBase {
         T.Stop memory stop = reg.stopOf(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher);
         assertEq(stop.bindingId, b);
         assertEq(stop.restrictions, T.RESTRICT_FULL_STOP);
-        // with a suspend-only publisher nobody holds the resume right: the stop stands
-        vm.prank(taskPublisher);
+        // the stop is the publisher's: the fulfiller cannot lift it, the suspend-only publisher can, without
+        // holding any resume right on a binding
+        vm.prank(worker);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
-        reg.resume(b, bytes32(0));
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, bytes32(0));
+        vm.prank(taskPublisher);
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, keccak256("cleared"));
+        (T.Verdict v3, bytes32[] memory ids3,) = a.evaluate(worker);
+        assertVerdict(v3, T.Verdict.Satisfied);
+        assertEq(ids3[0], fresh);
     }
 
     function adapterRequiringPublisherWith(uint8 rights) internal returns (ASFTaskTenderAdapter a) {
@@ -371,13 +377,16 @@ contract ASFAdapter8414Test is ASFBase {
         assertReason(reasons[0], T.Reason.StoppedByIntervener);
         (, , uint8 set) = reg.checkBinding(fresh, a.requirementFor(worker).clauses[0]);
         assertEq(set, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_DERISK_ONLY);
-        // the fulfiller cannot lift the stop through the terminated record either
+        // the terminated record is terminal for everyone, and the stop is not the fulfiller's to lift
+        vm.prank(taskPublisher);
+        vm.expectRevert(ASFErrors.InvalidState.selector);
+        reg.resume(b, bytes32(0));
         vm.prank(worker);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
-        reg.resume(b, bytes32(0));
-        // the publisher lifts it on the terminated record; the record stays Terminated and the fresh binding is admitted
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, bytes32(0));
+        // the publisher lifts it; the record stays Terminated and the fresh binding is admitted
         vm.prank(taskPublisher);
-        reg.resume(b, keccak256("report dismissed"));
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, keccak256("report dismissed"));
         assertEq(uint8(reg.bindingOf(b).state), uint8(T.BindingState.Terminated));
         assertEq(reg.stopOf(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher).bindingId, bytes32(0));
         (T.Verdict v2, bytes32[] memory ids2,) = a.evaluate(worker);
@@ -385,10 +394,100 @@ contract ASFAdapter8414Test is ASFBase {
         assertEq(ids2[0], fresh);
         a.judge(id, sid);
         assertEq(uint8(task.submissionOf(id, sid).status), uint8(ITaskTender.SubmissionStatus.Accepted));
-        // and the publisher can stop the fresh binding as well; the stop then points at it
+        // and the publisher can stop the fresh binding as well; the stop then points at it, and the publisher's
+        // own resumption of the fresh binding lifts the stop with it
         vm.prank(taskPublisher);
         reg.suspend(fresh, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report, again"));
         assertEq(reg.stopOf(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher).bindingId, fresh);
+        vm.prank(taskPublisher);
+        reg.resume(fresh, keccak256("report dismissed, again"));
+        assertEq(reg.stopOf(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher).bindingId, bytes32(0));
+        (T.Verdict v4,,) = a.evaluate(worker);
+        assertVerdict(v4, T.Verdict.Satisfied);
+    }
+
+    function test_N67_the_executor_of_one_tender_cannot_free_a_fulfiller_for_a_tender_that_never_named_it() public {
+        // tender A names the publisher (suspend) and an executor (resume); tender B names only the publisher
+        // (suspend and resume). The fulfiller holds one binding shaped for each.
+        address executor = address(0xE8EC);
+        T.Clause memory ca = clause();
+        ca.versions = new uint32[](1);
+        ca.versions[0] = 1;
+        ca.enforcement = T.ENFORCED_ACCOUNT;
+        ca.interveners = new T.Intervener[](2);
+        ca.interveners[0] = T.Intervener({account: taskPublisher, rights: T.RIGHT_SUSPEND});
+        ca.interveners[1] = T.Intervener({account: executor, rights: T.RIGHT_RESUME});
+        ASFTaskTenderAdapter tenderA = new ASFTaskTenderAdapter(reg, ITaskTenderKernel(address(task)), one(ca));
+        ASFTaskTenderAdapter tenderB = adapterRequiringPublisherWith(T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        T.BindingInput memory i = input(keccak256("w-a"));
+        i.subjectKey = ASFKeys.accountSubjectKey(worker);
+        i.scopeKey = ASFKeys.refScopeKey("task-tenders");
+        i.enforcement = T.ENFORCED_ACCOUNT;
+        i.interveners = ca.interveners;
+        bytes32 ba = adoptAs(worker, i);
+        bytes32 bb = selfAdoptWithIntervener(worker, keccak256("w-b"), taskPublisher, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        uint256 idA = task.mintTask(owner, taskPublisher, address(tenderA), TD, TH, "ipfs://task-a", terms(7 days));
+        uint256 idB = task.mintTask(owner, taskPublisher, address(tenderB), TD, TH, "ipfs://task-b", terms(7 days));
+        vm.startPrank(funder);
+        task.fundTask{value: 2 ether}(idA, 2 ether);
+        task.fundTask{value: 2 ether}(idB, 2 ether);
+        vm.stopPrank();
+        uint256 sa = submit(worker, idA);
+        uint256 sb = submit(worker, idB);
+        {
+            (T.Verdict va, bytes32[] memory idsa,) = tenderA.evaluate(worker);
+            (T.Verdict vb, bytes32[] memory idsb,) = tenderB.evaluate(worker);
+            assertVerdict(va, T.Verdict.Satisfied);
+            assertEq(idsa[0], ba);
+            assertVerdict(vb, T.Verdict.Satisfied);
+            assertEq(idsb[0], bb);
+        }
+        // the publisher stops the fulfiller through the binding of tender A; the executor of tender A resumes
+        // that record. Tender B never named the executor: the publisher's stop still stands for it (and for A)
+        vm.prank(taskPublisher);
+        reg.suspend(ba, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        vm.prank(executor);
+        reg.resume(ba, keccak256("decision"));
+        assertEq(uint8(reg.bindingOf(ba).state), uint8(T.BindingState.Active));
+        {
+            (T.Verdict vb,,) = tenderB.evaluate(worker);
+            assertVerdict(vb, T.Verdict.NotSatisfied);
+            (T.Verdict vbb, T.Reason rbb, uint8 setbb) = reg.checkBinding(bb, tenderB.requirementFor(worker).clauses[0]);
+            assertVerdict(vbb, T.Verdict.NotSatisfied);
+            assertReason(rbb, T.Reason.StoppedByIntervener);
+            assertEq(setbb, T.RESTRICT_FULL_STOP);
+            (T.Verdict va, bytes32[] memory idsa, T.Reason[] memory ra) = tenderA.evaluate(worker);
+            assertVerdict(va, T.Verdict.NotSatisfied);
+            assertEq(idsa[0], ba);
+            assertReason(ra[0], T.Reason.StoppedByIntervener);
+        }
+        vm.prank(worker);
+        tenderB.judge(idB, sb);
+        assertEq(uint8(task.submissionOf(idB, sb).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+        // the executor cannot lift the publisher's stop; the publisher can, and tender A then accepts
+        vm.prank(executor);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, bytes32(0));
+        vm.prank(taskPublisher);
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, keccak256("report dismissed"));
+        tenderA.judge(idA, sa);
+        assertEq(uint8(task.submissionOf(idA, sa).status), uint8(ITaskTender.SubmissionStatus.Accepted));
+        // had the publisher named the executor as its lifter, the executor's resumption would have lifted the
+        // stop for both tenders at once
+        vm.prank(taskPublisher);
+        reg.setStopLifter(executor);
+        vm.prank(taskPublisher);
+        reg.suspend(ba, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        {
+            (T.Verdict vb,,) = tenderB.evaluate(worker);
+            assertVerdict(vb, T.Verdict.NotSatisfied);
+        }
+        vm.prank(executor);
+        reg.resume(ba, keccak256("decision"));
+        {
+            (T.Verdict vb,,) = tenderB.evaluate(worker);
+            assertVerdict(vb, T.Verdict.Satisfied);
+        }
     }
 
     function test_N58_a_fulfiller_cannot_keep_a_resume_key_of_its_own_beside_the_required_intervener() public {
@@ -446,10 +545,21 @@ contract ASFAdapter8414Test is ASFBase {
         reg.resume(b2, bytes32(0));
         (T.Verdict v2,,) = esc.evaluate(worker2);
         assertVerdict(v2, T.Verdict.NotSatisfied);
+        // the executor reopens the record, but the stop is the publisher's: the publisher names the executor as
+        // its lifter, and the executor's resumption then lifts the stop as well
         vm.prank(executor);
         reg.resume(b2, keccak256("report dismissed"));
-        (T.Verdict v3,,) = esc.evaluate(worker2);
-        assertVerdict(v3, T.Verdict.Satisfied);
+        (T.Verdict v3,, T.Reason[] memory r3) = esc.evaluate(worker2);
+        assertVerdict(v3, T.Verdict.NotSatisfied);
+        assertReason(r3[0], T.Reason.StoppedByIntervener);
+        vm.prank(taskPublisher);
+        reg.setStopLifter(executor);
+        vm.prank(taskPublisher);
+        reg.suspend(b2, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        vm.prank(executor);
+        reg.resume(b2, keccak256("report dismissed"));
+        (T.Verdict v4,,) = esc.evaluate(worker2);
+        assertVerdict(v4, T.Verdict.Satisfied);
         esc.judge(id2, sid2);
         assertEq(uint8(task.submissionOf(id2, sid2).status), uint8(ITaskTender.SubmissionStatus.Accepted));
     }

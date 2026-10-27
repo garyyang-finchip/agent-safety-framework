@@ -249,7 +249,9 @@ contract ASFCheckTest is ASFBase {
         assertVerdict(v, T.Verdict.Satisfied);
 
         // the escalation shape: the clause names the guardian (suspend) and an executor (resume); the binding
-        // grants exactly that, so the executor, and only the executor, can lift the guardian's stop
+        // grants exactly that, so the executor, and only the executor, can lift the guardian's suspension of the
+        // record; the guardian's standing stop is the guardian's, and stands until the guardian lifts it or has
+        // named the executor as its lifter
         T.Intervener[] memory two = new T.Intervener[](2);
         two[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
         two[1] = T.Intervener({account: rando, rights: T.RIGHT_RESUME});
@@ -263,6 +265,20 @@ contract ASFCheckTest is ASFBase {
         reg.resume(puppet, bytes32(0));
         vm.prank(rando);
         reg.resume(puppet, bytes32(0));
+        (v, r,) = reg.checkBinding(puppet, c);
+        assertVerdict(v, T.Verdict.NotSatisfied, "the record is Active again, the guardian's stop still stands");
+        assertReason(r, T.Reason.StoppedByIntervener);
+        vm.prank(guardian);
+        reg.setStopLifter(rando);
+        vm.prank(rando);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("reviewed"));
+        (v,,) = reg.checkBinding(puppet, c);
+        assertVerdict(v, T.Verdict.Satisfied);
+        // with the executor named as the guardian's lifter, its resumption lifts the record and the stop at once
+        vm.prank(guardian);
+        reg.suspend(puppet, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
+        vm.prank(rando);
+        reg.resume(puppet, keccak256("reviewed"));
         (v,,) = reg.checkBinding(puppet, c);
         assertVerdict(v, T.Verdict.Satisfied);
 
@@ -492,14 +508,94 @@ contract ASFCheckTest is ASFBase {
             (, T.Reason rt,) = reg.checkBinding(b1, naming);
             assertReason(rt, T.Reason.Terminated);
         }
-        // the guardian lifts the stop through the terminated record: every sibling is satisfied again
+        // the adopter cannot lift the stop; the guardian lifts it, and every sibling is satisfied again
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, bytes32(0));
         vm.prank(guardian);
-        reg.resume(b1, keccak256("alert over"));
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("alert over"));
         {
             (T.Verdict vb2,,) = reg.checkBinding(b2, naming);
             assertVerdict(vb2, T.Verdict.Satisfied);
             (T.Verdict vfr,,) = reg.checkBinding(fresh, naming);
             assertVerdict(vfr, T.Verdict.Satisfied);
+        }
+    }
+
+    function test_N66_the_authority_to_lift_a_stop_does_not_come_from_a_bindings_resume_holder() public {
+        // two requirements for the same specification: the first names the guardian (suspend) and an executor
+        // (resume), the second names only the guardian (suspend and resume); the adopter holds one binding that
+        // meets each
+        T.Clause memory first = clause();
+        T.Intervener[] memory two = new T.Intervener[](2);
+        two[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        two[1] = T.Intervener({account: rando, rights: T.RIGHT_RESUME});
+        first.interveners = two;
+        T.Clause memory second = clause();
+        second.interveners = requiring(guardian, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        T.BindingInput memory ia = input(keccak256("a"));
+        ia.interveners = two;
+        bytes32 a = adoptAs(user, ia);
+        bytes32 b = adoptAs(user, withGuardian(input(keccak256("b")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        {
+            (T.Verdict va,,) = reg.checkBinding(a, first);
+            (T.Verdict vb,,) = reg.checkBinding(b, second);
+            assertVerdict(va, T.Verdict.Satisfied);
+            assertVerdict(vb, T.Verdict.Satisfied);
+        }
+        // the guardian stops the adopter through the first binding; the executor of the first requirement, whom
+        // the second never named, resumes it: the record reopens, the stop does not move
+        vm.prank(guardian);
+        reg.suspend(a, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("alert"));
+        vm.prank(rando);
+        reg.resume(a, keccak256("decision"));
+        {
+            (T.Verdict vb, T.Reason rb, uint8 setb) = reg.checkBinding(b, second);
+            assertVerdict(vb, T.Verdict.NotSatisfied, "the second requirement still sees the guardian's stop");
+            assertReason(rb, T.Reason.StoppedByIntervener);
+            assertEq(setb, T.RESTRICT_FULL_STOP);
+            (T.Verdict va, T.Reason ra,) = reg.checkBinding(a, first);
+            assertVerdict(va, T.Verdict.NotSatisfied, "and so does the first, which names the guardian too");
+            assertReason(ra, T.Reason.StoppedByIntervener);
+        }
+        // only the guardian lifts it
+        vm.prank(rando);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, bytes32(0));
+        vm.prank(guardian);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("over"));
+        {
+            (T.Verdict va,,) = reg.checkBinding(a, first);
+            (T.Verdict vb,,) = reg.checkBinding(b, second);
+            assertVerdict(va, T.Verdict.Satisfied);
+            assertVerdict(vb, T.Verdict.Satisfied);
+        }
+        // a second suspension by the guardian widens the stop rather than replacing it: a de-risk-only
+        // suspension of the second binding after a full stop through the first leaves the full stop in force
+        // for every binding of the adopter, and resuming the first binding alone does not lift anything unless
+        // the guardian itself does it
+        vm.prank(guardian);
+        reg.suspend(a, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("alert"));
+        vm.prank(guardian);
+        reg.suspend(b, T.RESTRICT_DERISK_ONLY, keccak256("resp"), keccak256("alert 2"));
+        bytes32 c3 = adoptAs(user, withGuardian(input(keccak256("c")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        {
+            (, T.Reason rc, uint8 setc) = reg.checkBinding(c3, second);
+            assertReason(rc, T.Reason.StoppedByIntervener);
+            assertEq(setc, T.RESTRICT_FULL_STOP | T.RESTRICT_DERISK_ONLY, "the union, full stop included");
+        }
+        vm.prank(rando);
+        reg.resume(a, keccak256("decision"));
+        {
+            (, T.Reason rc, uint8 setc) = reg.checkBinding(c3, second);
+            assertReason(rc, T.Reason.StoppedByIntervener);
+            assertEq(setc, T.RESTRICT_FULL_STOP | T.RESTRICT_DERISK_ONLY);
+        }
+        vm.prank(guardian);
+        reg.resume(b, keccak256("over"));
+        {
+            (T.Verdict vc,,) = reg.checkBinding(c3, second);
+            assertVerdict(vc, T.Verdict.Satisfied, "the guardian's own resumption lifts its stop");
         }
     }
 

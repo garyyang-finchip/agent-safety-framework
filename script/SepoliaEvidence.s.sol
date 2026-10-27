@@ -22,17 +22,21 @@ import {ITaskTender} from "../test/fixtures/task-token/interfaces/ITaskTender.so
 /// Phases (each a separate `forge script --sig` invocation; state in deployments/<network>.json):
 ///   1. deployCore()      registries, LendingDesk, guarded account + probe, task adapter (and, without
 ///                        TASK_TOKEN, a local TaskToken fixture); funds the agent and the guardian
-///      -> relink the examples with the real addresses:
-///         node tools/build-examples.js --dir deployments/sepolia/examples --chain-id 11155111
+///      -> copy the examples and the tender documents (script/tender/) under deployments/<run>/examples and
+///         relink them with the real addresses:
+///         node tools/build-examples.js --dir deployments/<run>/examples --chain-id 11155111
 ///              --spec-registry <specRegistry> --binding-registry <bindingRegistry> --publisher <deployer>
-///              --map 0x..a11ce=<deployer>,0x..a6e7=<agent>,0x..6a2d=<guardian>,0x..60a9=<deployer>,0x..aa=<agent>
+///              --map 0x..a11ce=<deployer>,0x..a6e7=<agent>,0x..6a2d=<guardian>,0x..60a9=<deployer>,0x..aa=<agent>,0x..6a4d=<guardedAccount>
 ///   2. publishAndAdopt() publish the two specifications; principal adopts for the assistant on the guarded
 ///                        account; organizer adopts for the swarm; agent adopts the derived member binding and
 ///                        its own worker binding; the principal presents the binding to the guarded account
 ///   3. guardLoop()       borrow (ok) -> guardian suspends (no new risk + derisk only) -> borrow refused -> repay ok -> guardian resumes -> borrow ok
 ///   4. tenderLoop()      mint a tender with the adapter as authority, fund it; the agent submits and is accepted
 ///                        and paid; the guardian (no binding) submits and is rejected
-///   5. lifecycle()       full-stop suspension by the principal refuses even repay; resume; terminate the swarm binding and show the
+///   5. stopLoop()        the publisher stops the worker's binding; the worker terminates it and adopts a fresh
+///                        one, submits again and is still rejected (the stop stands against the adopter); the
+///                        publisher lifts its stop; the worker is accepted and paid
+///   6. lifecycle()       full-stop suspension by the principal refuses even repay; resume; terminate the swarm binding and show the
 ///                        derived member binding failing with ParentNotSatisfied; deprecate a version
 ///
 /// Environment: PRIVATE_KEY, AGENT_PK, GUARDIAN_PK, optional TASK_TOKEN (live kernel), optional DEPLOYMENTS
@@ -59,6 +63,17 @@ contract SepoliaEvidence is Script {
 
     function _put(string memory key, string memory json) internal {
         vm.writeJson(json, _deployments(), key);
+    }
+
+    /// A tender document published next to the examples: its sha256 goes on chain, its locator is the hint.
+    function _doc(string memory file) internal view returns (bytes32 digest, string memory locator) {
+        string memory mp = _manifestPath();
+        bytes memory dir = bytes(mp);
+        // strip the trailing "manifest.json"
+        bytes memory out = new bytes(dir.length - 13);
+        for (uint256 i = 0; i < out.length; i++) out[i] = dir[i];
+        digest = sha256(vm.readFileBinary(string.concat(string(out), file)));
+        locator = _locator(file);
     }
 
     function _locator(string memory file) internal view returns (string memory) {
@@ -94,8 +109,9 @@ contract SepoliaEvidence is Script {
         _deployRegistries(c);
         _deployGuard(c);
         _deployAdapter(c);
-        payable(c.agent).transfer(0.012 ether);
-        payable(c.guardian).transfer(0.006 ether);
+        // the two other keys are funded only when they need it (a second run reuses their balances)
+        if (c.agent.balance < 0.006 ether) payable(c.agent).transfer(0.012 ether);
+        if (c.guardian.balance < 0.003 ether) payable(c.guardian).transfer(0.006 ether);
         vm.stopBroadcast();
         _recordCore(c);
     }
@@ -295,15 +311,18 @@ contract SepoliaEvidence is Script {
 
         vm.startBroadcast(pk);
         ITaskTender.TenderTerms memory terms = ITaskTender.TenderTerms(address(0), 0.001 ether, 2, 0, 0, 0, 0, 7 days);
-        uint256 tokenId = task.mintTask(deployer, deployer, address(adapter), sha256("ASF evidence task"), sha256("asf taskroot v1"), _locator("task.json"), terms);
+        (bytes32 taskDigest, string memory taskLocator) = _doc("tender/task.json");
+        uint256 tokenId = task.mintTask(deployer, deployer, address(adapter), taskDigest, taskDigest, taskLocator, terms);
         task.fundTask{value: 0.002 ether}(tokenId, 0.002 ether);
         vm.stopBroadcast();
 
+        (bytes32 d1, string memory l1) = _doc("tender/result-worker.json");
         vm.startBroadcast(agentPk);
-        uint256 sidWorker = task.submitFulfillment(tokenId, sha256("deliverable by the bound worker"), _locator("result-worker.json"));
+        uint256 sidWorker = task.submitFulfillment(tokenId, d1, l1);
         vm.stopBroadcast();
+        (bytes32 d2, string memory l2) = _doc("tender/result-unbound.json");
         vm.startBroadcast(guardianPk);
-        uint256 sidUnbound = task.submitFulfillment(tokenId, sha256("deliverable by an unbound account"), _locator("result-unbound.json"));
+        uint256 sidUnbound = task.submitFulfillment(tokenId, d2, l2);
         vm.stopBroadcast();
 
         uint256 before = agent.balance;
@@ -321,6 +340,68 @@ contract SepoliaEvidence is Script {
     }
 
     // ------------------------------------------------------------------ phase 5
+
+    /// The publisher's stop applies to the worker, not to one binding (Section 8.5): after the publisher suspends
+    /// the worker's binding, the worker terminates it and adopts a fresh one that names the publisher again, submits
+    /// to the same tender and is still rejected with StoppedByIntervener; the publisher lifts its stop (`liftStop`),
+    /// the worker submits once more and is accepted and paid (the tender's second completion).
+    function stopLoop() external {
+        uint256 pk = vm.envUint("PRIVATE_KEY");
+        uint256 agentPk = vm.envUint("AGENT_PK");
+        address agent = vm.addr(agentPk);
+        TaskToken task = TaskToken(_addr(".taskToken"));
+        ASFTaskTenderAdapter adapter = ASFTaskTenderAdapter(_addr(".taskTenderAdapter"));
+        ASFBindingRegistry reg = ASFBindingRegistry(_addr(".bindingRegistry"));
+        address specs = _addr(".specRegistry");
+        string memory s = _state();
+        bytes32 worker = vm.parseJsonBytes32(s, ".bindingWorkerSelf");
+        bytes32 spec1 = vm.parseJsonBytes32(s, ".specIdPersonalAssistant");
+        uint256 tokenId = vm.parseJsonUint(s, ".tenderTokenId");
+
+        // the publisher stops the worker's binding (an urgent stop: no response document yet, zero responseRef)
+        vm.startBroadcast(pk);
+        reg.suspend(worker, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report: deliverable misrepresented"));
+        vm.stopBroadcast();
+
+        // the worker terminates the stopped record and adopts a fresh binding under a new salt, then submits again
+        string memory m = vm.readFile(_manifestPath());
+        T.BindingInput memory fresh = _input(m, "worker-self.binding.json", specs, spec1, "bindings/worker-self.binding.json");
+        fresh.salt = bytes32(uint256(fresh.salt) + 1);
+        (bytes32 d3, string memory l3) = _doc("tender/result-worker-after-stop.json");
+        vm.startBroadcast(agentPk);
+        reg.terminate(worker, keccak256("replaced"));
+        bytes32 freshId = reg.adopt(fresh);
+        uint256 sidStopped = task.submitFulfillment(tokenId, d3, l3);
+        // judgment is permissionless: the worker calls it itself and is rejected, the stop standing against it
+        T.Verdict vStopped = adapter.judge(tokenId, sidStopped);
+        vm.stopBroadcast();
+        require(vStopped == T.Verdict.NotSatisfied, "the fresh binding is refused while the stop stands");
+        T.Stop memory stop = reg.stopOf(agent, ASFKeys.accountSubjectKey(agent), specs, spec1, vm.addr(pk));
+        require(stop.bindingId == worker, "the stop was recorded through the terminated binding");
+        require(reg.bindingOf(worker).suspendedBy == vm.addr(pk), "the terminated record keeps who stopped it");
+
+        // the stop is the publisher's: the publisher lifts it, and the fresh binding is then admitted
+        vm.startBroadcast(pk);
+        reg.liftStop(agent, ASFKeys.accountSubjectKey(agent), specs, spec1, vm.addr(pk), keccak256("report withdrawn"));
+        vm.stopBroadcast();
+        require(reg.stopOf(agent, ASFKeys.accountSubjectKey(agent), specs, spec1, vm.addr(pk)).bindingId == bytes32(0), "stop lifted");
+
+        (bytes32 d4, string memory l4) = _doc("tender/result-worker-after-lift.json");
+        uint256 before = agent.balance;
+        vm.startBroadcast(agentPk);
+        uint256 sidFresh = task.submitFulfillment(tokenId, d4, l4);
+        T.Verdict vFresh = adapter.judge(tokenId, sidFresh);
+        vm.stopBroadcast();
+        require(vFresh == T.Verdict.Satisfied, "the fresh binding is admitted once the stop is lifted");
+
+        _put(".bindingWorkerSelfFresh", _q(vm.toString(freshId)));
+        _put(".tenderSubmissionStopped", vm.toString(sidStopped));
+        _put(".tenderSubmissionFresh", vm.toString(sidFresh));
+        _put(".stopLoop", '"publisher stops the worker binding; worker terminates it, adopts afresh, submits and is rejected (StoppedByIntervener); publisher lifts its stop (liftStop); worker submits and is accepted"');
+        console2.log("stop loop complete; fresh binding paid", agent.balance - before);
+    }
+
+    // ------------------------------------------------------------------ phase 6
 
     function lifecycle() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");

@@ -358,12 +358,12 @@ contract ASFGuardedAccountTest is ASFBase {
         vm.prank(agent);
         gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (40)));
         assertEq(desk.debt(address(gacct)), 60);
-        // the owner cannot lift the stop; the guardian lifts it through the terminated record and the wallet reopens
+        // the owner cannot lift the stop; the guardian lifts it and the wallet reopens
         vm.prank(user);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
-        reg.resume(b, bytes32(0));
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, bytes32(0));
         vm.prank(guardian);
-        reg.resume(b, keccak256("alert over"));
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("alert over"));
         (T.Verdict v2,,) = gacct.status();
         assertVerdict(v2, T.Verdict.Satisfied);
         vm.prank(agent);
