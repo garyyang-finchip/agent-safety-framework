@@ -2,7 +2,7 @@
 
 Reference repository of **ERC-8468, Agent Safety Framework (ASF)** (Draft): a registry model through which the safety arrangements that govern autonomous systems (agents, swarms, economic units, any referenceable system) become protocol objects with a source, a version, a scope, an attributable adoption relation and a lifecycle.
 
-Status: Draft. ERC-8468 was assigned on 2026-10-27 in [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) (filed on 2026-10-25 under the placeholder number 9999); discussion thread: [ERC-8468: Agent Safety Framework (ASF)](https://ethereum-magicians.org/t/erc-8468-agent-safety-framework-asf/30073) on Ethereum Magicians. This repository holds revision 7 of the draft (v0.8.1). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested; the revision-5 evidence run was executed on Sepolia (36 transactions, all successful, contracts verified; see below).
+Status: Draft. ERC-8468 was assigned on 2026-10-27 in [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) (filed on 2026-10-25 under the placeholder number 9999); discussion thread: [ERC-8468: Agent Safety Framework (ASF)](https://ethereum-magicians.org/t/erc-8468-agent-safety-framework-asf/30073) on Ethereum Magicians. This repository holds revision 7 of the draft (v0.8.2). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested; the evidence run was executed on Sepolia twice, with the revision-5 contracts (36 transactions) and with the revision-7 contracts (43 transactions, including the standing-stop loop), all transactions successful and all contracts verified (see below).
 
 ## What it is
 
@@ -40,11 +40,12 @@ test/                                Foundry suite (93 tests, 67 of them negativ
                                      incl. ethers <-> solc vector cross-checks and the vendored TaskToken fixture
 tools/                               build-examples.js, vectors.js, validate.js, lint-erc.js, lib/canonical.js,
                                      test/ (node --test)
-script/SepoliaEvidence.s.sol         evidence run (deploy, publish, adopt, guard loop, tender loop, lifecycle)
+script/SepoliaEvidence.s.sol         evidence run (deploy, publish, adopt, guard loop, tender loop, stop loop, lifecycle)
 scripts/make-filing-package.py       builds ercs-pr-package/ for the ethereum/ERCs pull request
-deployments/                         Sepolia record: addresses and identifiers, the 36 transactions, the relinked examples
+deployments/                         Sepolia records of the two runs: addresses and identifiers, the transactions,
+                                     the relinked examples (sepolia*, revision 5; sepolia-rev7*, revision 7)
 docs/                                design memo, Magicians post and revision notes, test record, Sepolia runbook
-                                     and evidence record
+                                     and the two evidence records
 ```
 
 ## Build and test
@@ -80,9 +81,27 @@ The framework is designed to sit on top of existing and emerging agent standards
 
 ## Sepolia
 
-The evidence run (`script/SepoliaEvidence.s.sol`) was executed on Sepolia on 2026-10-26 (blocks 11994931 to 11995051) with the revision-5 contracts (interface identifier `0x1ff33bef`; revisions 6 and 7 change the registry and its libraries and are not yet deployed; a second run is prepared): it deployed both registries, published the two example specifications, created the example bindings (including the derived member binding), exercised the guarded-account loop (execute, the guardian suspends with its de-risk-only response, the de-risk call passes, new exposure reverts, the guardian resumes) and the tender loop against the live TASK-KERNEL v3.0 `TaskToken` (the bound worker accepted and paid, the unbound submitter rejected), then the lifecycle phase (the principal's full-stop response refuses even repayment, charter termination, the derived binding reporting `ParentNotSatisfied`, deprecation). 36 transactions, all successful. The record is in `deployments/` and `docs/sepolia-evidence.md`; the procedure in `docs/sepolia-runbook.md`.
+The evidence run (`script/SepoliaEvidence.s.sol`) has been executed on Sepolia twice, both times against the live TASK-KERNEL v3.0 `TaskToken`. The record of each run is in `deployments/` and `docs/`; the procedure in `docs/sepolia-runbook.md`.
 
-| Contract | Sepolia address |
+The second run, on 2026-10-27 (blocks 12003345 to 12003478), deployed the revision-7 contracts (interface identifier `0xcff7f826`): it deployed both registries with their two linked libraries, published the two example specifications, created the example bindings (including the derived member binding), exercised the guarded-account loop (execute, the guardian suspends with its de-risk-only response and the registry records the guardian's standing stop, the de-risk call passes, new exposure reverts, the guardian's resume lifts its stop), the tender loop against the live `TaskToken` (the bound worker accepted and paid, the unbound submitter rejected), the standing-stop loop of Section 8.5 (the task publisher stops the worker's binding; the worker terminates it and adopts a fresh one, submits and is rejected with `StoppedByIntervener`; the publisher lifts its stop through `liftStop`; the worker submits again and is accepted and paid) and the lifecycle phase (the principal's full-stop response refuses even repayment, charter termination, the derived binding reporting `ParentNotSatisfied`, deprecation). 43 transactions, all successful; `docs/sepolia-evidence-rev7.md`, `deployments/sepolia-rev7.json`, `deployments/sepolia-rev7.transactions.json`.
+
+| Contract (revision 7) | Sepolia address |
+|---|---|
+| `ASFSpecificationRegistry` | `0x9110b622a17F83065f1e9773D961EB10672932e5` |
+| `ASFBindingRegistry` | `0x136E2a88e1B518342CD997423BDa69Dd2c68e919` |
+| `ASFEvaluation` (library linked by the binding registry) | `0x9b12f62D69EAfc9a240b9AB889cC1647Bf9C56db` |
+| `ASFLifecycle` (library linked by the binding registry) | `0x6a6F645eC9F161735Cc22D441aFD1f513f3b143b` |
+| `ASFGuardedAccount` | `0xc88A3FdbC5a4934D335b24416cC9fbF4046e88b0` |
+| `OperatorProbe` | `0xA5cA2A45E0160c6fCAf00Fa846E9cD4C6241a18c` |
+| `LendingDesk` | `0x655B256CC0f942fff44b977A50B00bE7391C7341` |
+| `ASFTaskTenderAdapter` | `0x015393ECe2E3072055A3Fbe8Fc7f2979B7C7F3Ed` |
+| `TaskToken` (live TASK-KERNEL v3.0, consumed) | `0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7` |
+
+All eight deployed contracts are verified on Sourcify (runtime and creation match; solc 0.8.30, optimizer 200 runs, via IR). Specification identifiers: Personal Assistant Safety v1 `0x5ed86852…0e2a`, Swarm Shared Funds v1 `0x57dadd22…6888` (full values in `deployments/sepolia-rev7.json`).
+
+The first run, on 2026-10-26 (blocks 11994931 to 11995051), deployed the revision-5 contracts (interface identifier `0x1ff33bef`, one linked library) and exercised the same phases without the stop loop: 36 transactions, all successful, seven contracts verified on Sourcify; `docs/sepolia-evidence.md`, `deployments/sepolia.json`, `deployments/sepolia.transactions.json`. Those contracts stay deployed as they were.
+
+| Contract (revision 5) | Sepolia address |
 |---|---|
 | `ASFSpecificationRegistry` | `0x1939665F5905d0d9135Da4f27e36f1B8c84E014b` |
 | `ASFBindingRegistry` | `0xc3e1A1Cb021Ab96EBBeD3279018840016114A5c4` |
@@ -91,9 +110,6 @@ The evidence run (`script/SepoliaEvidence.s.sol`) was executed on Sepolia on 202
 | `OperatorProbe` | `0xD68B1bB09399Ca6acc802Bf2E2A4346ec810da77` |
 | `LendingDesk` | `0x78A466eb7A5FB8E101b02bf3EAee9E6f9C701d9E` |
 | `ASFTaskTenderAdapter` | `0x51772fabFB757Fb5A4186c0435Ec4fa76D75CE4e` |
-| `TaskToken` (live TASK-KERNEL v3.0, consumed) | `0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7` |
-
-All seven deployed contracts are verified on Sourcify (runtime and creation match; solc 0.8.30, optimizer 200 runs, via IR). Specification identifiers: Personal Assistant Safety v1 `0x9a6fdb5d…e30d`, Swarm Shared Funds v1 `0xb4ca2e72…e07a` (full values in `deployments/sepolia.json`).
 
 ## License
 

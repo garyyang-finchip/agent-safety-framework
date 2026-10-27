@@ -1,0 +1,6 @@
+{
+  "kind": "fulfillment-result",
+  "task": "ASF evidence task",
+  "fulfiller": "an account that holds no binding (the guardian key)",
+  "summary": "Submission by an unbound account; expected to be rejected with NoBinding."
+}

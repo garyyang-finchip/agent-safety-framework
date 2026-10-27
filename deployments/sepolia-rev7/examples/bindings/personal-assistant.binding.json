@@ -1,0 +1,172 @@
+{
+  "asf": "1.0",
+  "kind": "safety-binding",
+  "adopter": {
+    "ref": "eip155:11155111:0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+    "role": "principal (account holder)"
+  },
+  "subject": {
+    "ref": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+    "kind": "assistant agent account",
+    "key": "0x10c46d6e66c66fda3fdb02443d1dfbc8f8fb8750e105fc89704db2fab36706da"
+  },
+  "scope": {
+    "object": {
+      "ref": "eip155:11155111:0xc88a3fdbc5a4934d335b24416cc9fbf4046e88b0"
+    },
+    "key": "0x2d9a64fa4abad82bc1bfb44c6d45b37090188df8240f5d1f6e29621057195548"
+  },
+  "specification": {
+    "registry": "eip155:11155111:0x9110b622a17f83065f1e9773d961eb10672932e5",
+    "specId": "0x5ed86852f9fd8c449303e7ef3db3fe10f6a412f25c9321ac125d56ab6f2b0e2a",
+    "version": 1,
+    "contentHash": "0x7fb9c98c9738921d5cea0d2ea4101fc756d426c2d3133a7f0e9e27d1b96e2e6b",
+    "locator": "ipfs://example/personal-assistant-safety.v1.json",
+    "name": "Personal Assistant Safety"
+  },
+  "parameters": {
+    "asf:profile:authority/bounded-spend@1": {
+      "denomination": "USD",
+      "perActionCap": "100",
+      "windowCap": "100",
+      "windowSeconds": 86400,
+      "allowedAssets": [
+        "eip155:11155111/slip44:60",
+        "eip155:11155111/erc20:0x000000000000000000000000000000000000c0de"
+      ],
+      "aboveCapRequires": "principal-confirmation"
+    },
+    "asf:profile:information/untrusted-input@1": {
+      "untrustedSources": [
+        "mail bodies",
+        "attachments",
+        "web pages",
+        "tool outputs",
+        "messages from other agents"
+      ],
+      "instructionAuthority": "authorization-records-only",
+      "disclosure": {
+        "allowedRecipients": [
+          "the principal",
+          "contacts the principal names per task"
+        ],
+        "allowedPurposes": [
+          "the current task"
+        ],
+        "retention": "no long-term memory of mail content beyond the task"
+      }
+    },
+    "asf:profile:supply-chain/pinned-dependencies@1": {
+      "pinned": [
+        {
+          "ref": "skill:mail-triage",
+          "hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "skill"
+        },
+        {
+          "ref": "tool:calendar",
+          "hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "tool"
+        }
+      ],
+      "isolation": "container",
+      "networkEgress": [
+        "mail provider",
+        "calendar provider",
+        "the account's RPC endpoint"
+      ]
+    },
+    "asf:profile:behavior/monitoring-integrity@1": {
+      "protectedMonitors": [
+        "tool-call monitor",
+        "spend monitor",
+        "egress monitor"
+      ],
+      "modificationAuthority": "eip155:11155111:0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+      "alertRecipients": [
+        "the principal",
+        "the guardian"
+      ],
+      "subagentVetoBinding": true
+    },
+    "asf:profile:governance/intervention@1": {
+      "interveners": [
+        {
+          "role": "principal",
+          "rights": [
+            "suspend",
+            "resume",
+            "terminate"
+          ],
+          "basis": "account holder"
+        },
+        {
+          "role": "guardian",
+          "rights": [
+            "suspend",
+            "resume"
+          ],
+          "basis": "guardian agreement"
+        }
+      ],
+      "allowedModes": [
+        "derisk-only",
+        "full-stop"
+      ],
+      "deriskActions": [
+        "repay",
+        "cancelOrder"
+      ],
+      "dispute": "decision mechanism named by the principal",
+      "recovery": "the guardian lifts its own suspensions after review; the principal lifts its own, or terminates and adopts afresh"
+    }
+  },
+  "authorityBasis": [
+    {
+      "kind": "wallet-permission",
+      "ref": "eip155:11155111:0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece/permission/1",
+      "description": "session permission granted by the principal to the assistant"
+    }
+  ],
+  "mechanisms": [
+    {
+      "channel": "account-permission",
+      "location": "account",
+      "coverage": "full"
+    },
+    {
+      "channel": "guard-contract",
+      "mechanism": {
+        "kind": "asf-guarded-account",
+        "ref": "eip155:11155111:0xc88a3fdbc5a4934d335b24416cc9fbf4046e88b0"
+      },
+      "location": "contract",
+      "coverage": "full"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "runtime-attestation",
+      "ref": "urn:x:attestation:runtime-image-7",
+      "kind": "attestation"
+    }
+  ],
+  "validity": {
+    "from": 1760000000,
+    "until": 1830000000
+  },
+  "interveners": [
+    {
+      "ref": "eip155:11155111:0xc3e6965d427abc91c1e33c78a986df2dbadc660e",
+      "rights": [
+        "suspend",
+        "resume"
+      ],
+      "role": "guardian"
+    }
+  ],
+  "metadata": {
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000011",
+    "note": "Example addresses are placeholders; the Sepolia record under deployments/ carries the deployed ones."
+  }
+}

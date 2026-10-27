@@ -1,0 +1,6 @@
+{
+  "kind": "fulfillment-result",
+  "task": "ASF evidence task",
+  "fulfiller": "the bound worker (the agent key)",
+  "summary": "First submission by the worker whose own binding names the task publisher; expected to be accepted and paid."
+}

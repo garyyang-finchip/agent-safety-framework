@@ -1,0 +1,309 @@
+{
+  "generatedBy": "tools/build-examples.js",
+  "bindingRegistry": "0x136e2a88e1b518342cd997423bda69dd2c68e919",
+  "profiles": {
+    "asf:profile:authority/bounded-spend@1": {
+      "file": "profiles/authority-bounded-spend.json",
+      "family": "identity-authority",
+      "profileId": "0x82e3c00ebe2b864dc4f00560de6bc16054210defc587a87ff63d08ba16f384a0",
+      "descriptorHash": "0xa977cc8aa74c1ec9212cab172518402c6148838bb3346158828d2569401a79a0"
+    },
+    "asf:profile:behavior/monitoring-integrity@1": {
+      "file": "profiles/behavior-monitoring-integrity.json",
+      "family": "behavior-goals",
+      "profileId": "0x22ee508727490b4de840d7dd3f92246f1146451e00dacc386c40499b387fdd7e",
+      "descriptorHash": "0xa80e805532570f1c467161a16445572edc3847c625c19146b2fa76646f602df9"
+    },
+    "asf:profile:economic/shared-budget@1": {
+      "file": "profiles/economic-shared-budget.json",
+      "family": "multi-agent-system",
+      "profileId": "0xfdbf28e78d1daf54c98785838cc5a5493d9585816ceb7a89148512ea3742c44f",
+      "descriptorHash": "0x3c1d44f876d5b875ff648774d00cb52dfe1c551f0d8ecdfe8ca77828d820b3c6"
+    },
+    "asf:profile:governance/intervention@1": {
+      "file": "profiles/governance-intervention.json",
+      "family": "governance-accountability",
+      "profileId": "0x983ee76569373430ab86b01469d70568e95741b6d65f7f6ada9cf5354d0ec411",
+      "descriptorHash": "0x915d5f27b11cc8397972d3453f8aa432a3003c0e0b986ec9e62fd69b41019f57"
+    },
+    "asf:profile:information/untrusted-input@1": {
+      "file": "profiles/information-untrusted-input.json",
+      "family": "information-privacy",
+      "profileId": "0x9c02cc65ebdc625053ca7360bd89818db2cb46960fdd7a094a02ff1d299674a9",
+      "descriptorHash": "0xb7d1c62199afeba7612394d5c63c5e1d053d5941974be932020ba42fc857bd64"
+    },
+    "asf:profile:supply-chain/pinned-dependencies@1": {
+      "file": "profiles/supply-chain-pinned-dependencies.json",
+      "family": "execution-supply-chain",
+      "profileId": "0xf3ee542de406f218ec9afdf9aaad2d99364116413e232f53ce289806c957be93",
+      "descriptorHash": "0xcd4e55c6e8f5beeaba10827aa0a9f83b21017bc2583b153430ed01a1f6d07d12"
+    }
+  },
+  "specifications": {
+    "Personal Assistant Safety": {
+      "file": "specifications/personal-assistant-safety.v1.json",
+      "version": 1,
+      "chainId": 11155111,
+      "registry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+      "publisher": "0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "specId": "0x5ed86852f9fd8c449303e7ef3db3fe10f6a412f25c9321ac125d56ab6f2b0e2a",
+      "contentHash": "0x7fb9c98c9738921d5cea0d2ea4101fc756d426c2d3133a7f0e9e27d1b96e2e6b",
+      "requiredProfiles": [
+        {
+          "identifier": "asf:profile:authority/bounded-spend@1",
+          "profileId": "0x82e3c00ebe2b864dc4f00560de6bc16054210defc587a87ff63d08ba16f384a0"
+        },
+        {
+          "identifier": "asf:profile:information/untrusted-input@1",
+          "profileId": "0x9c02cc65ebdc625053ca7360bd89818db2cb46960fdd7a094a02ff1d299674a9"
+        },
+        {
+          "identifier": "asf:profile:governance/intervention@1",
+          "profileId": "0x983ee76569373430ab86b01469d70568e95741b6d65f7f6ada9cf5354d0ec411"
+        }
+      ]
+    },
+    "Swarm Shared Funds": {
+      "file": "specifications/swarm-shared-funds.v1.json",
+      "version": 1,
+      "chainId": 11155111,
+      "registry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+      "publisher": "0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+      "contentHash": "0xfedecb6f2d6ccba740782cd128ef46dc7b884f750e68ce56b8faac303c6b750f",
+      "requiredProfiles": [
+        {
+          "identifier": "asf:profile:economic/shared-budget@1",
+          "profileId": "0xfdbf28e78d1daf54c98785838cc5a5493d9585816ceb7a89148512ea3742c44f"
+        },
+        {
+          "identifier": "asf:profile:authority/bounded-spend@1",
+          "profileId": "0x82e3c00ebe2b864dc4f00560de6bc16054210defc587a87ff63d08ba16f384a0"
+        },
+        {
+          "identifier": "asf:profile:governance/intervention@1",
+          "profileId": "0x983ee76569373430ab86b01469d70568e95741b6d65f7f6ada9cf5354d0ec411"
+        }
+      ]
+    }
+  },
+  "bindings": {
+    "personal-assistant.binding.json": {
+      "file": "bindings/personal-assistant.binding.json",
+      "adopter": "0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+      "subjectRef": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+      "subjectKey": "0x10c46d6e66c66fda3fdb02443d1dfbc8f8fb8750e105fc89704db2fab36706da",
+      "scopeKey": "0x2d9a64fa4abad82bc1bfb44c6d45b37090188df8240f5d1f6e29621057195548",
+      "specification": {
+        "registry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+        "specId": "0x5ed86852f9fd8c449303e7ef3db3fe10f6a412f25c9321ac125d56ab6f2b0e2a",
+        "version": 1,
+        "contentHash": "0x7fb9c98c9738921d5cea0d2ea4101fc756d426c2d3133a7f0e9e27d1b96e2e6b"
+      },
+      "paramsHash": "0x5c13b19a6ec0874cf82b346b8b50166de4dd4e690d71cd1f71e484d469e275e1",
+      "authorityRef": "0x7482ed2fb6a2a636dc02e0eff7349000f71c11cda5b358928e8513758d988ddf",
+      "enforcement": 18,
+      "enforcementLocations": [
+        "account",
+        "contract"
+      ],
+      "validFrom": 1760000000,
+      "validUntil": 1830000000,
+      "parentBindingId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "interveners": [
+        {
+          "account": "0xc3e6965d427abc91c1e33c78a986df2dbadc660e",
+          "rights": 3
+        }
+      ],
+      "intervenerCount": 1,
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000011",
+      "bindingId": "0xf06dd518f079330ba17fbef76f4af0413cee95a6b38b5e691af3f8a8163a6b5f"
+    },
+    "swarm-charter.binding.json": {
+      "file": "bindings/swarm-charter.binding.json",
+      "adopter": "0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+      "subjectRef": "x:swarm:eip155:11155111:0x00000000000000000000000000000000000005aa:7",
+      "subjectKey": "0x009877fda26d47f7d13d6c9ded954b9dbd29e7cf34cc8ff23cc2f015d193c272",
+      "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
+      "specification": {
+        "registry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+        "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+        "version": 1,
+        "contentHash": "0xfedecb6f2d6ccba740782cd128ef46dc7b884f750e68ce56b8faac303c6b750f"
+      },
+      "paramsHash": "0x18d5122daacb5702949da5d152ab615216860c5fb02b6d38e6991de83d1eb832",
+      "authorityRef": "0xa6da89077296d6c938ee08f838638cfcdc5793fb11ed8ab8cb550f3a4e289dce",
+      "enforcement": 48,
+      "enforcementLocations": [
+        "contract",
+        "collective"
+      ],
+      "validFrom": 0,
+      "validUntil": 1830000000,
+      "parentBindingId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "interveners": [
+        {
+          "account": "0x0000000000000000000000000000000000ac0df0",
+          "rights": 7
+        }
+      ],
+      "intervenerCount": 1,
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000021",
+      "bindingId": "0x9db519934b7b8f6aee1a5ad6f1ed37eb4165c95bbd40019fea77357504b01ccf"
+    },
+    "worker-self.binding.json": {
+      "file": "bindings/worker-self.binding.json",
+      "adopter": "0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+      "subjectRef": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+      "subjectKey": "0x10c46d6e66c66fda3fdb02443d1dfbc8f8fb8750e105fc89704db2fab36706da",
+      "scopeKey": "0x31a55b0844b606a621484e4f2142b3b9de9547ae87ad1f5918a2efa1844a45ca",
+      "specification": {
+        "registry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+        "specId": "0x5ed86852f9fd8c449303e7ef3db3fe10f6a412f25c9321ac125d56ab6f2b0e2a",
+        "version": 1,
+        "contentHash": "0x7fb9c98c9738921d5cea0d2ea4101fc756d426c2d3133a7f0e9e27d1b96e2e6b"
+      },
+      "paramsHash": "0x2ede9dafdcd6ea3387288dfc3c5014aa36e709bc4802f4ebba4a8c1d1aff6168",
+      "authorityRef": "0x4ef75e435e1cf0c6180984f9992dc13eaa242e99a3c46f739fb9ea86a5cdaac2",
+      "enforcement": 2,
+      "enforcementLocations": [
+        "account"
+      ],
+      "validFrom": 0,
+      "validUntil": 0,
+      "parentBindingId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "interveners": [
+        {
+          "account": "0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+          "rights": 3
+        }
+      ],
+      "intervenerCount": 1,
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000041",
+      "bindingId": "0xc634bead52eeaddff2e2947dd31e27ec04d2749e45475b5074d165529f2736f4"
+    },
+    "swarm-member-a.binding.json": {
+      "file": "bindings/swarm-member-a.binding.json",
+      "adopter": "0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+      "subjectRef": "eip155:11155111:0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+      "subjectKey": "0x10c46d6e66c66fda3fdb02443d1dfbc8f8fb8750e105fc89704db2fab36706da",
+      "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
+      "specification": {
+        "registry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+        "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+        "version": 1,
+        "contentHash": "0xfedecb6f2d6ccba740782cd128ef46dc7b884f750e68ce56b8faac303c6b750f"
+      },
+      "paramsHash": "0xa907eb00a6426facbe8bda7c302fc9e9010e3a8949ebac7dc277531bf0c5ae87",
+      "authorityRef": "0x68ce43ef4f2484b82df26e122ff4de1e4d734ae7ac3b5367741af04ae8bac0af",
+      "enforcement": 18,
+      "enforcementLocations": [
+        "account",
+        "contract"
+      ],
+      "validFrom": 0,
+      "validUntil": 1830000000,
+      "parentBindingId": "0x9db519934b7b8f6aee1a5ad6f1ed37eb4165c95bbd40019fea77357504b01ccf",
+      "interveners": [
+        {
+          "account": "0x0000000000000000000000000000000000ac0df0",
+          "rights": 7
+        }
+      ],
+      "intervenerCount": 1,
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000031",
+      "bindingId": "0x30683308f51b555ee7a0d5244bf1d74d56b28b5069d5e00810c6c9994e4fe389"
+    }
+  },
+  "requirements": {
+    "swarm-admission.requirement.json": {
+      "file": "requirements/swarm-admission.requirement.json",
+      "documentHash": "0x15ae4b6259fe1f406a60a8b486b631c3deeb1b7a177d5bde175b6d466a6ef556",
+      "concrete": true,
+      "onChain": {
+        "combinator": 2,
+        "k": 3,
+        "clauses": [
+          {
+            "specRegistry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+            "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+            "versions": [
+              1
+            ],
+            "adopter": "0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+            "subjectKey": "0x009877fda26d47f7d13d6c9ded954b9dbd29e7cf34cc8ff23cc2f015d193c272",
+            "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
+            "enforcement": 48,
+            "interveners": []
+          },
+          {
+            "specRegistry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+            "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+            "versions": [
+              1
+            ],
+            "adopter": "0x08fcb3bd9c4f171b1cba69be2ca9e79e80f9ea6e",
+            "subjectKey": "0x10c46d6e66c66fda3fdb02443d1dfbc8f8fb8750e105fc89704db2fab36706da",
+            "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
+            "enforcement": 18,
+            "interveners": []
+          },
+          {
+            "specRegistry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+            "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+            "versions": [
+              1
+            ],
+            "adopter": "0x00000000000000000000000000000000000000bb",
+            "subjectKey": "0x6fdd0374e3d1657c0eeeeb1f51fe6f5f7b79cd937b27490d0e315434c34edfa8",
+            "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
+            "enforcement": 18,
+            "interveners": []
+          },
+          {
+            "specRegistry": "0x9110b622a17f83065f1e9773d961eb10672932e5",
+            "specId": "0x57dadd226d5a5c86379dc5f33ded4e9efceec1c2a9e1c4aeecd952e3c42d6888",
+            "versions": [
+              1
+            ],
+            "adopter": "0x00000000000000000000000000000000000000cc",
+            "subjectKey": "0x7ea8a2785d5a551ce1d12aa2493b8d23ae9c47ea777d3a003e275252c21e3ada",
+            "scopeKey": "0x045b0f249b8616b9027a0d0589d5b84c2b6d16127853a2db940d1e6c1c264e18",
+            "enforcement": 18,
+            "interveners": []
+          }
+        ]
+      },
+      "requirementId": "0x7d7f8747deb9d8f1caca15086b756a7a0af952eee850b0b0eef4f4a892b59e7e"
+    },
+    "tender-admission.requirement.json": {
+      "file": "requirements/tender-admission.requirement.json",
+      "documentHash": "0x594af35ef2b4a8190f9380f5a5377e406659906c5cac12a32e13579e9438fcaf",
+      "concrete": false,
+      "onChain": null,
+      "requirementId": null
+    }
+  },
+  "responses": {
+    "guardian-derisk-only.response.json": {
+      "file": "responses/guardian-derisk-only.response.json",
+      "restrictions": [
+        "no-new-risk",
+        "derisk-only"
+      ],
+      "restrictionsBits": 9,
+      "responseRef": "0x0a212ad7cac9e59bebb311e46966f81484b61dad860aed979f5278dbecdd10ab"
+    },
+    "principal-full-stop.response.json": {
+      "file": "responses/principal-full-stop.response.json",
+      "restrictions": [
+        "full-stop"
+      ],
+      "restrictionsBits": 16,
+      "responseRef": "0x151f65ad2bc63d74a7f66574ae0b1f81a6b3c1fac9d50bd88d12ff6ac06532b8"
+    }
+  }
+}
