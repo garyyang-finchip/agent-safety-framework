@@ -1,6 +1,6 @@
 {
   "name": "agent-safety-framework",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Agent Safety Framework (ASF): reference implementation, schemas, vectors and tools",
   "license": "CC0-1.0",

@@ -2,7 +2,7 @@
 """Build the ethereum/ERCs filing package for the Agent Safety Framework.
 
 Usage:
-    python3 scripts/make-filing-package.py [--number 9999] [--discussions-to URL] [--out ercs-pr-package]
+    python3 scripts/make-filing-package.py [--number 8468] [--discussions-to URL] [--out ercs-pr-package]
 
 Produces:
     <out>/ERCS/erc-<number>.md            the ERC text with the number and asset links rewritten
@@ -89,7 +89,7 @@ def lint(text: str, number: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--number", default="9999")
+    ap.add_argument("--number", default="8468")
     ap.add_argument("--discussions-to", default=None)
     ap.add_argument("--out", default=os.path.join(ROOT, "ercs-pr-package"))
     args = ap.parse_args()

@@ -1,6 +1,6 @@
-# Draft ERC: Agent Safety Framework (ASF) — attributable adoption of versioned safety specifications
+# ERC-8468: Agent Safety Framework (ASF)
 
-Pull request: https://github.com/ethereum/ERCs/pull/2113 (placeholder number 9999 until an editor assigns one)
+Pull request: https://github.com/ethereum/ERCs/pull/2113 (ERC-8468, number assigned on 2026-10-27)
 Repository: https://github.com/garyyang-finchip/agent-safety-framework (reference implementation, schemas, vectors, worked examples, two closed-loop consumers, design memo)
 
 Current text: revision 7 (see the revision note below and the replies that introduce each revision).

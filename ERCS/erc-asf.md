@@ -1,9 +1,9 @@
 ---
-eip: 9999
+eip: 8468
 title: Agent Safety Framework (ASF)
 description: Registry of versioned safety specifications and of the scoped, attributable adoption relations that bind subjects to them
 author: Gary Yang (@garyyang-finchip)
-discussions-to: https://ethereum-magicians.org/t/draft-erc-agent-safety-framework-asf-a-registry-of-versioned-safety-specifications-and-of-the-scoped-attributable-adoption-relations-that-bind-agents-to-them/30073
+discussions-to: https://ethereum-magicians.org/t/erc-8468-agent-safety-framework-asf/30073
 status: Draft
 type: Standards Track
 category: ERC

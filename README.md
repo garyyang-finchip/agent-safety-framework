@@ -1,8 +1,8 @@
-# Agent Safety Framework (ASF)
+# ERC-8468: Agent Safety Framework (ASF)
 
-Reference repository of the draft ERC **Agent Safety Framework (ASF)**: a registry model through which the safety arrangements that govern autonomous systems (agents, swarms, economic units, any referenceable system) become protocol objects with a source, a version, a scope, an attributable adoption relation and a lifecycle.
+Reference repository of **ERC-8468, Agent Safety Framework (ASF)** (Draft): a registry model through which the safety arrangements that govern autonomous systems (agents, swarms, economic units, any referenceable system) become protocol objects with a source, a version, a scope, an attributable adoption relation and a lifecycle.
 
-Status: Draft, filed as [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) under the placeholder number 9999; discussion thread on [Ethereum Magicians (topic 30073)](https://ethereum-magicians.org/t/draft-erc-agent-safety-framework-asf-a-registry-of-versioned-safety-specifications-and-of-the-scoped-attributable-adoption-relations-that-bind-agents-to-them/30073). This repository holds revision 7 of the draft (v0.8). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested; the revision-5 evidence run was executed on Sepolia (36 transactions, all successful, contracts verified; see below).
+Status: Draft. ERC-8468 was assigned on 2026-10-27 in [ethereum/ERCs#2113](https://github.com/ethereum/ERCs/pull/2113) (filed on 2026-10-25 under the placeholder number 9999); discussion thread: [ERC-8468: Agent Safety Framework (ASF)](https://ethereum-magicians.org/t/erc-8468-agent-safety-framework-asf/30073) on Ethereum Magicians. This repository holds revision 7 of the draft (v0.8.1). Reference implementation, schemas, vectors, worked examples and two closed-loop consumers are complete and tested; the revision-5 evidence run was executed on Sepolia (36 transactions, all successful, contracts verified; see below).
 
 ## What it is
 
@@ -23,7 +23,7 @@ The design memo (`docs/design-memo.md`) maps the problem space on three axes use
 ## Repository
 
 ```
-ERCS/erc-asf.md                      ERC text (source; the filing package names it erc-<number>.md)
+ERCS/erc-asf.md                      ERC text (source; the filing package names it erc-8468.md)
 assets/erc-asf/
   contracts/                         ASFSpecificationRegistry, ASFBindingRegistry, ASFTypes, ASFErrors,
                                      interfaces/ (incl. the vendored ITaskTenderKernel subset),
@@ -55,7 +55,7 @@ forge build
 forge test
 npm run check          # rebuild examples, regenerate vectors, validate schemas, run the tool tests
 npm run lint:erc       # eipw lint of the ERC text (spelling findings are listed, not gating)
-python3 scripts/make-filing-package.py --number 9999   # --discussions-to <URL> overrides the thread URL
+python3 scripts/make-filing-package.py                 # --number and --discussions-to override the defaults (8468, the thread URL)
 ```
 
 `forge` needs solc 0.8.30 (downloaded automatically) and the vendored `lib/forge-std` (1.9.7). The project compiles via IR (`via_ir = true` in `foundry.toml`; the suite also passes without it): the binding registry delegates its check to the externally linked library `ASFEvaluation` and its writes (`adopt`, `suspend`, `resume`, `terminate`, `liftStop`, `setStopLifter`) to `ASFLifecycle`, which keeps the registry's deployed code within the per-transaction gas cap of networks that price code deposit heavily (see `docs/sepolia-evidence.md`); the interface, the identifiers and the behaviour are unchanged by the split.
