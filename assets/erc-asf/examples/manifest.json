@@ -297,6 +297,19 @@
       "restrictionsBits": 9,
       "responseRef": "0xda45ad5bf7b0b070d8e382ba213acf8a85c01612742d7cd8814853bfc12c8c1b"
     },
+    "guardian-full-stop-widening.response.json": {
+      "file": "responses/guardian-full-stop-widening.response.json",
+      "restrictions": [
+        "no-new-risk",
+        "derisk-only",
+        "full-stop"
+      ],
+      "restrictionsBits": 25,
+      "responseRef": "0x9071360ff3fa4a3ad73e04fd71f2ee0aa0a7b44e628c24460da271e238727de4",
+      "supersedes": [
+        "0xda45ad5bf7b0b070d8e382ba213acf8a85c01612742d7cd8814853bfc12c8c1b"
+      ]
+    },
     "principal-full-stop.response.json": {
       "file": "responses/principal-full-stop.response.json",
       "restrictions": [

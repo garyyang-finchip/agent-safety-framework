@@ -1,6 +1,6 @@
 # Sepolia evidence runbook
 
-The evidence run exercises the whole framework on Sepolia with the worked examples and the two closed-loop consumers. It has been executed twice, each time after an end-to-end rehearsal on a local Anvil chain: with the revision-5 contracts on 2026-10-26 (36 transactions across five transaction phases, all successful; record in `docs/sepolia-evidence.md`, `deployments/sepolia.json`, `deployments/sepolia.transactions.json` and `deployments/sepolia/`), and with the revision-7 contracts on 2026-10-27, after the script had gained the standing-stop loop of Section 8.5 as a sixth transaction phase (43 transactions, all successful; record in `docs/sepolia-evidence-rev7.md`, `deployments/sepolia-rev7.json`, `deployments/sepolia-rev7.transactions.json` and `deployments/sepolia-rev7/`). Three keys take part:
+The evidence run exercises the whole framework on Sepolia with the worked examples and the two closed-loop consumers. It has been executed twice, each time after an end-to-end rehearsal on a local Anvil chain: with the revision-5 contracts on 2026-10-26 (36 transactions across five transaction phases, all successful; record in `docs/sepolia-evidence.md`, `deployments/sepolia.json`, `deployments/sepolia.transactions.json` and `deployments/sepolia/`), and with the revision-7 contracts on 2026-10-27, after the script had gained the standing-stop loop of Section 8.5 as a sixth transaction phase (43 transactions, all successful; record in `docs/sepolia-evidence-rev7.md`, `deployments/sepolia-rev7.json`, `deployments/sepolia-rev7.transactions.json` and `deployments/sepolia-rev7/`). Revision 8 changes the evaluation's response set in force and adds a seventh transaction phase for it (the set loop below, rehearsed on Anvil); a third run with the current contracts is prepared and takes a new name. Three keys take part:
 
 - **Deployer** (`PRIVATE_KEY`): deploys everything, plays the specification publisher, the principal of the guarded account, the swarm organizer and the task publisher; funds the two other keys when they run low; pays most gas.
 - **Agent** (`AGENT_PK`): the assistant operating the guarded account (through the operator probe), swarm member A, and the worker who fulfills the tender. Phase 1 sends it 0.012 ETH from the deployer when its balance is below 0.006 ETH.
@@ -10,7 +10,7 @@ Prerequisites: Foundry, Node 22, `npm install`, a Sepolia RPC URL, the deployer 
 
 Sepolia's gas schedule since the Glamsterdam upgrade (2026-10-06) prices state and code roughly ten times higher than Anvil's default schedule, and a transaction may use at most 16,777,216 gas (EIP-7825). Two consequences for this run: gas limits must come from live estimates, never from an Anvil rehearsal (the first Sepolia attempt of the first run, sent with Anvil's limit, ran out of gas); and the binding registry delegates its check to the externally linked library `ASFEvaluation` and, since revision 6, its writes (`adopt`, `suspend`, `resume`, `terminate`, `liftStop`, `setStopLifter`) to `ASFLifecycle`; `forge script` deploys the libraries through the deterministic CREATE2 factory before the registry. The revision-5 registry alone took about 15.1 million gas to deploy, 90% of the cap; the current registry is 7,637 bytes of runtime code and took 12,018,098 gas (72% of the cap) in the second run, with the two libraries at 3,923 and 5,546 bytes. Deployment cost grows by about 1,400 gas per byte of deployed code, so any change that grows a contract's code should be checked against the cap with `eth_estimateGas` before a run.
 
-The setup below names the files of the second run (`sepolia-rev7`); every run uses a fresh deployments file and examples directory of its own, so that the earlier records and the locators pinned on chain stay as they are. A further run takes a new name.
+The setup below names the files of the third run (`sepolia-rev8`); every run uses a fresh deployments file and examples directory of its own, so that the earlier records and the locators pinned on chain stay as they are.
 
 ```
 export SEPOLIA_RPC_URL=...
@@ -18,10 +18,10 @@ export PRIVATE_KEY=0x...            # deployer
 export AGENT_PK=0x...
 export GUARDIAN_PK=0x...
 export TASK_TOKEN=0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7   # live TASK-KERNEL v3.0 TaskToken on Sepolia
-export DEPLOYMENTS=deployments/sepolia-rev7.json
-export MANIFEST=deployments/sepolia-rev7/examples/manifest.json
-export LOCATOR_BASE=https://raw.githubusercontent.com/garyyang-finchip/agent-safety-framework/main/deployments/sepolia-rev7/examples/
-mkdir -p deployments/sepolia-rev7 && echo '{}' > deployments/sepolia-rev7.json
+export DEPLOYMENTS=deployments/sepolia-rev8.json
+export MANIFEST=deployments/sepolia-rev8/examples/manifest.json
+export LOCATOR_BASE=https://raw.githubusercontent.com/garyyang-finchip/agent-safety-framework/main/deployments/sepolia-rev8/examples/
+mkdir -p deployments/sepolia-rev8 && echo '{}' > deployments/sepolia-rev8.json
 ```
 
 ## Phase 1: deploy
@@ -30,17 +30,17 @@ mkdir -p deployments/sepolia-rev7 && echo '{}' > deployments/sepolia-rev7.json
 forge script script/SepoliaEvidence.s.sol --sig "deployCore()" --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-Deploys the `ASFEvaluation` and `ASFLifecycle` libraries (through the CREATE2 factory, so their addresses do not depend on the deployer's nonce), `ASFSpecificationRegistry`, `ASFBindingRegistry` linked to both, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend and resume rights. The agent and the guardian are funded only when their balances are below the thresholds above. Writes the deployments file.
+Deploys the `ASFEvaluation` and `ASFLifecycle` libraries (through the CREATE2 factory, so their addresses do not depend on the deployer's nonce), `ASFSpecificationRegistry`, `ASFBindingRegistry` linked to both, the `LendingDesk` target, the `ASFGuardedAccount` (requirement: the deployer's own adoption of Personal Assistant Safety v1 for the agent, account-enforced, with the guardian as a required intervener holding the suspend and resume rights, so that the account relies on the guardian's standing stops; the first two runs named no intervener) with its `OperatorProbe`, and the `ASFTaskTenderAdapter` bound to the live `TaskToken` (without `TASK_TOKEN` a local fixture is deployed instead). The adapter's template requires the fulfiller's own adoption of the same specification with the deployer (the task publisher) as an intervener holding the suspend and resume rights. The agent and the guardian are funded only when their balances are below the thresholds above. Writes the deployments file.
 
 ## Phase 2: relink the examples with the real addresses
 
 The example documents carry placeholder addresses. Copy them under `deployments/`, together with the tender documents of `script/tender/` (the task document and the four fulfillment results whose SHA-256 digests the tender and stop loops put on the `TaskToken`), and relink so that the hashes that go on chain are the hashes of the files that will be published (the `mkdir -p` of the setup block must have run first, otherwise `cp -r` creates the run directory as the examples directory itself):
 
 ```
-cp -r assets/erc-asf/examples deployments/sepolia-rev7/examples
-cp -r script/tender deployments/sepolia-rev7/examples/tender
-D=deployments/sepolia-rev7.json; j() { python3 -c "import json;print(json.load(open('$D'))['$1'])"; }
-node tools/build-examples.js --dir deployments/sepolia-rev7/examples --chain-id 11155111 \
+cp -r assets/erc-asf/examples deployments/sepolia-rev8/examples
+cp -r script/tender deployments/sepolia-rev8/examples/tender
+D=deployments/sepolia-rev8.json; j() { python3 -c "import json;print(json.load(open('$D'))['$1'])"; }
+node tools/build-examples.js --dir deployments/sepolia-rev8/examples --chain-id 11155111 \
   --spec-registry $(j specRegistry) --binding-registry $(j bindingRegistry) --publisher $(j deployer) \
   --map "0x00000000000000000000000000000000000a11ce=$(j deployer),0x000000000000000000000000000000000000a6e7=$(j agent),0x0000000000000000000000000000000000006a2d=$(j guardian),0x00000000000000000000000000000000000060a9=$(j deployer),0x00000000000000000000000000000000000000aa=$(j agent),0x0000000000000000000000000000000000006a4d=$(j guardedAccount)"
 node tools/validate.js
@@ -88,9 +88,17 @@ forge script script/SepoliaEvidence.s.sol --sig "lifecycle()" --rpc-url $SEPOLIA
 
 The principal suspends with the response set of `principal-full-stop.response.json` (`RESTRICT_FULL_STOP`, bits 16): even repay is refused; resume; the swarm binding is terminated and the derived member binding fails with `ParentNotSatisfied` while its own record stays `Active`; version 1 of the swarm specification is deprecated.
 
+## Phase 8: set loop
+
+```
+forge script script/SepoliaEvidence.s.sol --sig "setLoop()" --rpc-url $SEPOLIA_RPC_URL --broadcast
+```
+
+The response set in force carries the standing stops of the accounts the account's clause names, whatever reason the check reports first (Section 10.1, revision 8). The principal adopts a sibling binding for the agent (same document, next salt). The guardian suspends the presented binding with `guardian-derisk-only.response.json` (bits 9) and then widens its stop to a full stop through the sibling with `guardian-full-stop-widening.response.json` (bits 25, a document that names the one it supersedes): the stop reads 25 while the presented record still carries 9, and repay through the account is refused. The principal terminates the sibling (the stop stays), adopts a fresh binding, suspends it itself with `RESTRICT_DERISK_ONLY` and presents it: repay is refused again, the full stop being in the set in force although the record shows de-risk only. The guardian lifts its stop; repay passes under the principal's own suspension and borrow does not; the principal resumes and borrow passes; the guardian reopens the first record. The sibling and fresh binding identifiers are written to the deployments file.
+
 ## Rehearsal on Anvil
 
-The same phases run against a local Anvil chain with its default funded keys; this is how the runs are rehearsed (36 transactions for the revision-5 script, 44 for the current one: the local run deploys the fixture `TaskToken` as one more transaction and skips the funding transfers, since Anvil's keys are funded). The only differences are the chain id (which `build-examples.js --chain-id 31337` also writes into every `eip155:` reference of the copied examples), a local locator base and the fixture `TaskToken` that `deployCore` deploys when `TASK_TOKEN` is unset:
+The same phases run against a local Anvil chain with its default funded keys; this is how the runs are rehearsed (36 transactions for the revision-5 script, 44 for the revision-7 script, 59 for the current one: the local run deploys the fixture `TaskToken` as one more transaction and skips the funding transfers, since Anvil's keys are funded). The only differences are the chain id (which `build-examples.js --chain-id 31337` also writes into every `eip155:` reference of the copied examples), a local locator base and the fixture `TaskToken` that `deployCore` deploys when `TASK_TOKEN` is unset:
 
 ```
 anvil --port 8545 &
@@ -104,7 +112,7 @@ D=deployments/anvil.json; j() { python3 -c "import json;print(json.load(open('$D
 node tools/build-examples.js --dir deployments/anvil/examples --chain-id 31337 \
   --spec-registry $(j specRegistry) --binding-registry $(j bindingRegistry) --publisher $(j deployer) \
   --map "0x00000000000000000000000000000000000a11ce=$(j deployer),0x000000000000000000000000000000000000a6e7=$(j agent),0x0000000000000000000000000000000000006a2d=$(j guardian),0x00000000000000000000000000000000000060a9=$(j deployer),0x00000000000000000000000000000000000000aa=$(j agent),0x0000000000000000000000000000000000006a4d=$(j guardedAccount)"
-for ph in publishAndAdopt guardLoop tenderLoop stopLoop lifecycle; do
+for ph in publishAndAdopt guardLoop tenderLoop stopLoop lifecycle setLoop; do
   forge script script/SepoliaEvidence.s.sol --sig "$ph()" --rpc-url http://127.0.0.1:8545 --broadcast
 done
 ```

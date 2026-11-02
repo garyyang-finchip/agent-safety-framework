@@ -202,13 +202,25 @@ if (fs.existsSync(path.join(EX, 'responses'))) {
       if (!(r in RESTRICTION_BITS)) throw new Error(`${f}: unknown restriction ${r}`);
       return acc | RESTRICTION_BITS[r];
     }, 0);
+    let rewrite = false;
     if (doc.binding && doc.binding.example) {
       const b = manifest.bindings[doc.binding.example];
       if (!b) throw new Error(`${f}: unknown binding example ${doc.binding.example}`);
       doc.binding.id = b.bindingId;
-      writeJson(path.join(EX, 'responses', f), doc);
+      rewrite = true;
     }
+    // a widening document names the earlier documents it supersedes by their responseRef; the files are processed
+    // in name order, so an earlier document's hash is known when the later one is relinked
+    for (const sup of doc.supersedes || []) {
+      if (!sup.example) continue;
+      const e = manifest.responses[sup.example];
+      if (!e) throw new Error(`${f}: unknown or later response example ${sup.example}`);
+      sup.responseRef = e.responseRef;
+      rewrite = true;
+    }
+    if (rewrite) writeJson(path.join(EX, 'responses', f), doc);
     manifest.responses[f] = { file: `responses/${f}`, restrictions: doc.restrictions, restrictionsBits: bits, responseRef: C.canonicalHash(doc) };
+    if (doc.supersedes) manifest.responses[f].supersedes = doc.supersedes.map((x) => x.responseRef);
   }
 }
 

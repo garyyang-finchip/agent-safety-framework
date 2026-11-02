@@ -578,9 +578,12 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(stop.responseRef, keccak256("resp-1"));
         assertEq(stop.bindingId, b2);
         assertEq(stop.since, uint64(START));
-        // the records keep their own sets
+        // the records keep their own sets and their own response documents: the stop's document is the latest
+        // supplied, the earlier one stays on the record it was supplied with (and in the StopRecorded event)
         assertEq(reg.bindingOf(b1).restrictions, T.RESTRICT_FULL_STOP);
         assertEq(reg.bindingOf(b2).restrictions, T.RESTRICT_NO_NEW_RISK);
+        assertEq(reg.bindingOf(b1).responseRef, keccak256("resp-1"));
+        assertEq(reg.bindingOf(b2).responseRef, bytes32(0));
         // the guardian resuming one of its suspensions lifts its stop (the stop is one object, the guardian's);
         // the other record stays Suspended on its own account
         vm.prank(guardian);
@@ -603,5 +606,7 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(stop.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_SHRINK);
         assertEq(stop.responseRef, keccak256("resp-4"));
         assertEq(stop.bindingId, b3);
+        assertEq(reg.bindingOf(b1).responseRef, keccak256("resp-3"), "the earlier document stays on its record");
+        assertEq(reg.bindingOf(b3).responseRef, keccak256("resp-4"));
     }
 }

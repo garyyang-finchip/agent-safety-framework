@@ -38,6 +38,12 @@ import {ITaskTender} from "../test/fixtures/task-token/interfaces/ITaskTender.so
 ///                        publisher lifts its stop; the worker is accepted and paid
 ///   6. lifecycle()       full-stop suspension by the principal refuses even repay; resume; terminate the swarm binding and show the
 ///                        derived member binding failing with ParentNotSatisfied; deprecate a version
+///   7. setLoop()         the response set in force carries the guardian's standing stop whatever the presented record
+///                        says: the guardian widens its stop to a full stop through a sibling binding (a widening
+///                        response document that supersedes the first), and repay is refused although the presented
+///                        record carries de-risk only; the principal terminates the sibling and presents a fresh
+///                        binding it suspended itself with de-risk only, and repay is still refused; the guardian
+///                        lifts its stop, repay passes under the self-suspension and borrow does not; resume; borrow ok
 ///
 /// Environment: PRIVATE_KEY, AGENT_PK, GUARDIAN_PK, optional TASK_TOKEN (live kernel), optional DEPLOYMENTS
 /// (default deployments/sepolia.json), optional MANIFEST (default deployments/sepolia/examples/manifest.json),
@@ -126,9 +132,13 @@ contract SepoliaEvidence is Script {
     }
 
     /// The principal's account requires the principal's own adoption of Personal Assistant Safety v1 for the
-    /// assistant, enforced at least at the account level.
+    /// assistant, enforced at least at the account level, with the guardian as a required intervener holding the
+    /// suspend and the resume right: the account relies on the guardian's stops (Section 8.5), and the clause
+    /// closes the resume right to the guardian.
     function _deployGuard(Core memory c) internal {
         T.RequirementSet memory req = _oneClause(c.specs, c.spec1, c.deployer, ASFKeys.accountSubjectKey(c.agent));
+        req.clauses[0].interveners = new T.Intervener[](1);
+        req.clauses[0].interveners[0] = T.Intervener({account: c.guardian, rights: T.RIGHT_SUSPEND | T.RIGHT_RESUME});
         ASFGuardedAccount acct = new ASFGuardedAccount(ASFBindingRegistry(c.reg), c.deployer, address(0), req);
         OperatorProbe probe = new OperatorProbe(c.agent, IGuardedAccountLike(address(acct)));
         acct.setOperator(address(probe));
@@ -446,6 +456,110 @@ contract SepoliaEvidence is Script {
 
         _put(".lifecycle", '"full stop refused repay; resumed; charter terminated; member ParentNotSatisfied; swarm spec v1 deprecated"');
         console2.log("lifecycle complete");
+    }
+
+    // ------------------------------------------------------------------ phase 7
+
+    /// The response set in force carries the stops of the accounts the clause names, whatever reason is reported
+    /// first (Section 10.1): a record that shows a mild set cannot hide the guardian's full stop from the account.
+    function setLoop() external {
+        uint256 pk = vm.envUint("PRIVATE_KEY");
+        uint256 agentPk = vm.envUint("AGENT_PK");
+        uint256 guardianPk = vm.envUint("GUARDIAN_PK");
+        ASFBindingRegistry reg = ASFBindingRegistry(_addr(".bindingRegistry"));
+        ASFGuardedAccount acct = ASFGuardedAccount(payable(_addr(".guardedAccount")));
+        OperatorProbe probe = OperatorProbe(_addr(".operatorProbe"));
+        LendingDesk desk = LendingDesk(_addr(".lendingDesk"));
+        address specs = _addr(".specRegistry");
+        string memory st = _state();
+        bytes32 personal = vm.parseJsonBytes32(st, ".bindingPersonalAssistant");
+        bytes32 spec1 = vm.parseJsonBytes32(st, ".specIdPersonalAssistant");
+        address principal = vm.addr(pk);
+        address guardian = vm.addr(guardianPk);
+        bytes32 subject = ASFKeys.accountSubjectKey(vm.addr(agentPk));
+        string memory m = vm.readFile(_manifestPath());
+
+        // the principal holds a second binding for the assistant (same document, next salt); the account keeps
+        // presenting the first
+        T.BindingInput memory second = _input(m, "personal-assistant.binding.json", specs, spec1, "bindings/personal-assistant.binding.json");
+        second.salt = bytes32(uint256(second.salt) + 1);
+        vm.startBroadcast(pk);
+        bytes32 sibling = reg.adopt(second);
+        vm.stopBroadcast();
+
+        // the guardian suspends the presented binding with de-risk only, then widens its stop to a full stop
+        // through the sibling, with the response document that supersedes the first
+        vm.startBroadcast(guardianPk);
+        reg.suspend(
+            personal,
+            uint8(vm.parseJsonUint(m, '.responses["guardian-derisk-only.response.json"].restrictionsBits')),
+            vm.parseJsonBytes32(m, '.responses["guardian-derisk-only.response.json"].responseRef'),
+            keccak256("alert: injected instruction detected")
+        );
+        reg.suspend(
+            sibling,
+            uint8(vm.parseJsonUint(m, '.responses["guardian-full-stop-widening.response.json"].restrictionsBits')),
+            vm.parseJsonBytes32(m, '.responses["guardian-full-stop-widening.response.json"].responseRef'),
+            keccak256("escalation: funds at risk")
+        );
+        vm.stopBroadcast();
+        T.Stop memory stop = reg.stopOf(principal, subject, specs, spec1, guardian);
+        require(stop.restrictions == 25 && stop.bindingId == sibling, "the stop widened to the union through the sibling");
+        require(reg.bindingOf(personal).restrictions == 9, "the presented record itself still carries de-risk only");
+
+        // repay is refused: the set in force for the account's clause is the presented record's set and the
+        // guardian's stop together, full stop included
+        vm.startBroadcast(agentPk);
+        (bool ok1,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+        vm.stopBroadcast();
+        require(!ok1, "repay under the widened stop should be refused although the record shows de-risk only");
+
+        // the principal terminates the sibling (the stop stays), adopts a fresh binding, suspends it itself with
+        // de-risk only and presents it: still refused
+        T.BindingInput memory third = _input(m, "personal-assistant.binding.json", specs, spec1, "bindings/personal-assistant.binding.json");
+        third.salt = bytes32(uint256(third.salt) + 2);
+        vm.startBroadcast(pk);
+        reg.terminate(sibling, keccak256("replaced"));
+        bytes32 fresh = reg.adopt(third);
+        reg.suspend(fresh, T.RESTRICT_DERISK_ONLY, bytes32(0), keccak256("maintenance: unwinding"));
+        bytes32[] memory present = new bytes32[](1);
+        present[0] = fresh;
+        acct.presentBindings(present);
+        vm.stopBroadcast();
+        require(reg.stopOf(principal, subject, specs, spec1, guardian).restrictions == 25, "the stop survives the termination");
+        vm.startBroadcast(agentPk);
+        (bool ok2,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+        vm.stopBroadcast();
+        require(!ok2, "repay under a self-suspension with de-risk only should be refused while the full stop stands");
+
+        // the guardian lifts its stop: repay passes under the principal's own de-risk-only suspension, borrow does
+        // not; the principal resumes and borrow passes
+        vm.startBroadcast(guardianPk);
+        reg.liftStop(principal, subject, specs, spec1, guardian, keccak256("incident closed"));
+        vm.stopBroadcast();
+        vm.startBroadcast(agentPk);
+        (bool ok3,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.repay, (1)));
+        (bool ok4,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        vm.stopBroadcast();
+        require(ok3, "repay under the principal's own de-risk-only suspension should pass once the stop is lifted");
+        require(!ok4, "borrow under de-risk only should be refused");
+        vm.startBroadcast(pk);
+        reg.resume(fresh, keccak256("maintenance over"));
+        vm.stopBroadcast();
+        vm.startBroadcast(agentPk);
+        (bool ok5,) = probe.attempt(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        vm.stopBroadcast();
+        require(ok5, "borrow after resume should pass");
+        // the guardian reopens the first record it suspended (no stop stands any more); the account presents the
+        // fresh binding from here on
+        vm.startBroadcast(guardianPk);
+        reg.resume(personal, keccak256("reviewed"));
+        vm.stopBroadcast();
+
+        _put(".bindingPersonalAssistantSibling", _q(vm.toString(sibling)));
+        _put(".bindingPersonalAssistantFresh", _q(vm.toString(fresh)));
+        _put(".setLoop", '"guardian suspends the presented binding (derisk only) and widens its stop to a full stop through a sibling (superseding document); repay refused although the record shows derisk only; principal terminates the sibling, adopts afresh, self-suspends (derisk only) and presents; repay refused; guardian lifts its stop; repay ok, borrow refused; principal resumes; borrow ok; guardian reopens the first record"');
+        console2.log("set loop complete; desk debt", desk.debt(address(acct)));
     }
 
     // ------------------------------------------------------------------ helpers

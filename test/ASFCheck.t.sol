@@ -640,7 +640,8 @@ contract ASFCheckTest is ASFBase {
             assertReason(ru, T.Reason.IntervenerMismatch);
         }
         // and before the ancestor walk: a derived binding under a suspended root, whose adopter is stopped by the
-        // guardian, reports the stop rather than the parent
+        // guardian, reports the stop rather than the parent, with the set in force: the stop's set and the parent's
+        // together (Section 10.1)
         {
             bytes32 root = adoptAs(rando, withGuardian(input(keccak256("root")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
             T.BindingInput memory c = withGuardian(input(keccak256("child")), T.RIGHT_SUSPEND | T.RIGHT_RESUME);
@@ -650,7 +651,91 @@ contract ASFCheckTest is ASFBase {
             reg.suspend(root, T.RESTRICT_NO_NEW_RISK, bytes32(0), keccak256("root alert"));
             (, T.Reason rchild, uint8 setchild) = reg.checkBinding(child, naming);
             assertReason(rchild, T.Reason.StoppedByIntervener);
-            assertEq(setchild, T.RESTRICT_FULL_STOP, "the set of the stop against the adopter, not the parent's");
+            assertEq(setchild, T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK, "the set in force: the stop's set and the parent's");
+        }
+    }
+
+    function test_N68_the_set_in_force_carries_the_named_stops_whatever_reason_is_reported_first() public {
+        T.Clause memory naming = clause();
+        naming.interveners = requiring(guardian, T.RIGHT_SUSPEND);
+        T.Clause memory plain = clause();
+        // the guardian stops the adopter with a full stop through binding a; the adopter terminates a and keeps b
+        bytes32 a = adoptAs(user, withGuardian(input(keccak256("a")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        bytes32 b = adoptAs(user, withGuardian(input(keccak256("b")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        vm.prank(guardian);
+        reg.suspend(a, T.RESTRICT_FULL_STOP, keccak256("stop"), keccak256("alert"));
+        vm.prank(user);
+        reg.terminate(a, keccak256("replaced"));
+        {
+            // b, Active: the stop, with its set
+            (T.Verdict v, T.Reason r, uint8 set) = reg.checkBinding(b, naming);
+            assertVerdict(v, T.Verdict.NotSatisfied);
+            assertReason(r, T.Reason.StoppedByIntervener);
+            assertEq(set, T.RESTRICT_FULL_STOP);
+        }
+        // the adopter suspends b itself with de-risk only: the first failing step is the state, and the set in
+        // force is the union of b's own set and the guardian's stop, not b's set alone
+        vm.prank(user);
+        reg.suspend(b, T.RESTRICT_DERISK_ONLY, keccak256("own"), keccak256("own"));
+        {
+            (T.Verdict v, T.Reason r, uint8 set) = reg.checkBinding(b, naming);
+            assertVerdict(v, T.Verdict.NotSatisfied);
+            assertReason(r, T.Reason.Suspended);
+            assertEq(set, T.RESTRICT_FULL_STOP | T.RESTRICT_DERISK_ONLY, "the stop's set is in force with the record's own");
+            // `check` returns the same set per clause
+            (, T.Reason[] memory rc, uint8[] memory sc) = reg.check(one(naming), ids1(b));
+            assertReason(rc[0], T.Reason.Suspended);
+            assertEq(sc[0], T.RESTRICT_FULL_STOP | T.RESTRICT_DERISK_ONLY);
+            // a clause that names nobody is not concerned by the stop and sees the record's own set
+            (, T.Reason rp, uint8 setp) = reg.checkBinding(b, plain);
+            assertReason(rp, T.Reason.Suspended);
+            assertEq(setp, T.RESTRICT_DERISK_ONLY);
+            // the record itself carries only its own set
+            assertEq(reg.bindingOf(b).restrictions, T.RESTRICT_DERISK_ONLY);
+        }
+        // a derived binding under a parent the adopter suspended itself: ParentNotSatisfied, with the union
+        {
+            bytes32 root = adoptAs(user, withGuardian(input(keccak256("root")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+            T.BindingInput memory c = withGuardian(input(keccak256("child")), T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+            c.parentBindingId = root;
+            bytes32 child = adoptAs(user, c);
+            vm.prank(user);
+            reg.suspend(root, T.RESTRICT_NO_NEW_RISK, bytes32(0), keccak256("root"));
+            (, T.Reason rchild, uint8 setchild) = reg.checkBinding(child, plain);
+            assertReason(rchild, T.Reason.ParentNotSatisfied);
+            assertEq(setchild, T.RESTRICT_NO_NEW_RISK, "a clause naming nobody: the chain's set alone");
+            (, T.Reason rnamed, uint8 setnamed) = reg.checkBinding(child, naming);
+            assertReason(rnamed, T.Reason.StoppedByIntervener); // the stop is checked before the ancestors
+            assertEq(setnamed, T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK, "with the chain's set in the union");
+            // once the stop is lifted, the same child reports the parent alone
+            vm.prank(guardian);
+            reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("over"));
+            (, T.Reason rafter, uint8 setafter) = reg.checkBinding(child, naming);
+            assertReason(rafter, T.Reason.ParentNotSatisfied);
+            assertEq(setafter, T.RESTRICT_NO_NEW_RISK);
+        }
+        // after the lift, b reports its own set alone under either clause
+        {
+            (, T.Reason r, uint8 set) = reg.checkBinding(b, naming);
+            assertReason(r, T.Reason.Suspended);
+            assertEq(set, T.RESTRICT_DERISK_ONLY);
+        }
+        // a chain that is not in force keeps no path open, stop or no stop: with the guardian's stop recorded again,
+        // an expired sibling reports Expired with an empty set, and a terminated one Terminated with an empty set
+        {
+            bytes32 d = adoptAs(user, withGuardian(input(keccak256("d")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+            vm.prank(guardian);
+            reg.suspend(d, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("again"));
+            T.BindingInput memory e = withGuardian(input(keccak256("expiring")), T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+            e.validUntil = uint64(block.timestamp + 1);
+            bytes32 expiring = adoptAs(user, e);
+            vm.warp(block.timestamp + 1);
+            (, T.Reason re, uint8 sete) = reg.checkBinding(expiring, naming);
+            assertReason(re, T.Reason.Expired);
+            assertEq(sete, 0);
+            (, T.Reason ra, uint8 seta) = reg.checkBinding(a, naming);
+            assertReason(ra, T.Reason.Terminated);
+            assertEq(seta, 0);
         }
     }
 }

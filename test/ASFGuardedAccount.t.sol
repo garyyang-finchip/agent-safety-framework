@@ -370,4 +370,72 @@ contract ASFGuardedAccountTest is ASFBase {
         gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
         assertEq(desk.debt(address(gacct)), 61);
     }
+
+    function test_N69_a_self_suspension_does_not_reopen_de_risking_under_a_guardians_full_stop() public {
+        T.Clause memory c = clauseFor(user, subjectAgent, bytes32(0), 1);
+        c.enforcement = T.ENFORCED_ACCOUNT;
+        c.interveners = new T.Intervener[](1);
+        c.interveners[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND | T.RIGHT_RESUME});
+        ASFGuardedAccount gacct = new ASFGuardedAccount(reg, user, agent, one(c));
+        // the principal holds two bindings for the agent that meet the clause and presents the first
+        T.BindingInput memory i = input(keccak256("wallet-s1"));
+        i.enforcement = T.ENFORCED_ACCOUNT;
+        i = withGuardian(i, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        bytes32 b1 = adoptAs(user, i);
+        T.BindingInput memory j = input(keccak256("wallet-s2"));
+        j.enforcement = T.ENFORCED_ACCOUNT;
+        j = withGuardian(j, T.RIGHT_SUSPEND | T.RIGHT_RESUME);
+        bytes32 b2 = adoptAs(user, j);
+        vm.startPrank(user);
+        gacct.presentBindings(ids1(b1));
+        gacct.setDeriskAllowed(address(desk), LendingDesk.repay.selector, true);
+        vm.stopPrank();
+        vm.prank(agent);
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (100)));
+
+        // the guardian stops everything through b1; the principal terminates b1
+        vm.prank(guardian);
+        reg.suspend(b1, T.RESTRICT_FULL_STOP, keccak256("stop"), keccak256("alert"));
+        vm.prank(user);
+        reg.terminate(b1, keccak256("replaced"));
+        // the principal suspends the sibling itself with de-risk only and presents it: the account sees Suspended,
+        // but with the set in force, the guardian's full stop included, so repayment stays closed
+        vm.startPrank(user);
+        reg.suspend(b2, T.RESTRICT_DERISK_ONLY, keccak256("own response"), keccak256("own"));
+        gacct.presentBindings(ids1(b2));
+        vm.stopPrank();
+        (T.Verdict v, T.Reason[] memory reasons, uint8[] memory sets) = gacct.status();
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.Suspended);
+        assertEq(sets[0], T.RESTRICT_FULL_STOP | T.RESTRICT_DERISK_ONLY, "the guardian's stop is in the set in force");
+        assertEq(reg.bindingOf(b2).restrictions, T.RESTRICT_DERISK_ONLY, "the record itself carries only its own set");
+        vm.prank(agent);
+        vm.expectRevert();
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (40)));
+        vm.prank(agent);
+        vm.expectRevert();
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+        assertEq(desk.debt(address(gacct)), 100);
+        // the principal's own resumption of b2 changes nothing about the stop: the fresh Active record reports it
+        vm.prank(user);
+        reg.resume(b2, keccak256("own over"));
+        (T.Verdict v2, T.Reason[] memory reasons2, uint8[] memory sets2) = gacct.status();
+        assertVerdict(v2, T.Verdict.NotSatisfied);
+        assertReason(reasons2[0], T.Reason.StoppedByIntervener);
+        assertEq(sets2[0], T.RESTRICT_FULL_STOP);
+        // the guardian lifts its stop: with b2 Active the wallet reopens; had b2 stayed self-suspended with de-risk
+        // only, only repayment would have
+        vm.prank(guardian);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("alert over"));
+        (T.Verdict v3,,) = gacct.status();
+        assertVerdict(v3, T.Verdict.Satisfied);
+        vm.prank(user);
+        reg.suspend(b2, T.RESTRICT_DERISK_ONLY, keccak256("own response"), keccak256("own again"));
+        vm.prank(agent);
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.repay, (40)));
+        assertEq(desk.debt(address(gacct)), 60);
+        vm.prank(agent);
+        vm.expectRevert();
+        gacct.execute(address(desk), 0, abi.encodeCall(LendingDesk.borrow, (1)));
+    }
 }
