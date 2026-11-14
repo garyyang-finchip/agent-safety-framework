@@ -609,4 +609,119 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(reg.bindingOf(b1).responseRef, keccak256("resp-3"), "the earlier document stays on its record");
         assertEq(reg.bindingOf(b3).responseRef, keccak256("resp-4"));
     }
+
+    function test_N70_an_interveners_suspension_is_never_blocked_by_an_existing_one() public {
+        // a suspend-only guardian: before revision 9 the adopter could lock it out of its escalation path by
+        // suspending its own binding first with a milder set (suspend reverted with InvalidState, resume with
+        // NotAuthorized, and the record stayed at the adopter's set until the adopter chose to resume)
+        bytes32 id = adoptAs(user, withGuardian(input(keccak256("b")), T.RIGHT_SUSPEND));
+        vm.prank(user);
+        reg.suspend(id, T.RESTRICT_DERISK_ONLY, keccak256("own"), keccak256("maintenance"));
+        assertEq(reg.bindingOf(id).suspendedBy, user);
+        // the guardian escalates in one call: the record widens, becomes the guardian's, and the stop is recorded
+        vm.prank(guardian);
+        vm.expectEmit(true, true, true, true);
+        emit IASFBindingRegistry.StopRecorded(
+            user, subjectAgent, address(specs), specId, guardian, id, T.RESTRICT_FULL_STOP, keccak256("stop")
+        );
+        vm.expectEmit(true, true, true, true);
+        emit IASFBindingRegistry.BindingStateChanged(
+            id, T.BindingState.Suspended, T.BindingState.Suspended, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP, keccak256("stop"), guardian, keccak256("alert")
+        );
+        reg.suspend(id, T.RESTRICT_FULL_STOP, keccak256("stop"), keccak256("alert"));
+        T.Binding memory b = reg.bindingOf(id);
+        assertEq(uint8(b.state), uint8(T.BindingState.Suspended));
+        assertEq(b.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP, "the record's set is the union");
+        assertEq(b.responseRef, keccak256("stop"), "the guardian's document replaces the adopter's");
+        assertEq(b.suspendedBy, guardian, "the record is now the guardian's");
+        T.Stop memory stop = reg.stopOf(user, subjectAgent, address(specs), specId, guardian);
+        assertEq(stop.restrictions, T.RESTRICT_FULL_STOP);
+        assertEq(stop.bindingId, id);
+        // the adopter can no longer lift what it started; the suspend-only guardian cannot resume either, as before,
+        // and the adopter keeps the right to terminate
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        vm.prank(guardian);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        // the adopter's own re-suspension stays an invalid transition, on its own record and on the guardian's
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.InvalidState.selector);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, bytes32(0), keccak256("again"));
+        // the guardian may widen further; a document is kept when none is supplied
+        vm.prank(guardian);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, bytes32(0), keccak256("more"));
+        b = reg.bindingOf(id);
+        assertEq(b.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK);
+        assertEq(b.responseRef, keccak256("stop"));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).restrictions, T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK);
+        // a stranger still cannot suspend, a Terminated record still accepts nothing
+        vm.prank(rando);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
+        vm.prank(user);
+        reg.terminate(id, keccak256("replaced"));
+        vm.prank(guardian);
+        vm.expectRevert(ASFErrors.InvalidState.selector);
+        reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
+        assertEq(reg.bindingOf(id).suspendedBy, guardian, "the terminated record shows who stopped it");
+
+        // with the resume right, the guardian recovers in one call too and its own resumption lifts its stop
+        bytes32 id2 = adoptAs(user, withGuardian(input(keccak256("b2")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
+        vm.prank(user);
+        reg.suspend(id2, T.RESTRICT_DERISK_ONLY, bytes32(0), keccak256("maintenance"));
+        vm.prank(guardian);
+        reg.suspend(id2, T.RESTRICT_FULL_STOP, keccak256("stop-2"), keccak256("alert"));
+        assertEq(reg.bindingOf(id2).suspendedBy, guardian);
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id2, bytes32(0));
+        vm.prank(guardian);
+        reg.resume(id2, keccak256("over"));
+        assertEq(uint8(reg.bindingOf(id2).state), uint8(T.BindingState.Active));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).bindingId, bytes32(0), "the guardian's resumption lifted its stop");
+    }
+
+    function test_N71_a_second_interveners_widening_keeps_the_record_with_the_first_and_its_stop_its_own() public {
+        // the adopter added a suspend-only intervener of its own (allowed next to the required one) and the
+        // required intervener holds the suspend and the resume right
+        T.Intervener[] memory two = new T.Intervener[](2);
+        two[0] = T.Intervener({account: rando, rights: T.RIGHT_SUSPEND});
+        two[1] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND | T.RIGHT_RESUME});
+        T.BindingInput memory i = input(keccak256("b"));
+        i.interveners = two;
+        bytes32 id = adoptAs(user, i);
+        // the extra intervener suspends first with a mild set: the record is its, with its stop recorded
+        vm.prank(rando);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, keccak256("mild"), keccak256("first"));
+        assertEq(reg.bindingOf(id).suspendedBy, rando);
+        // the guardian widens: the record keeps the first intervener, the set is the union, the document is the
+        // guardian's, and the guardian's stop is recorded separately from the first intervener's
+        vm.prank(guardian);
+        reg.suspend(id, T.RESTRICT_FULL_STOP, keccak256("stop"), keccak256("escalation"));
+        T.Binding memory b = reg.bindingOf(id);
+        assertEq(b.suspendedBy, rando, "the record stays with the intervener that suspended it");
+        assertEq(b.restrictions, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_FULL_STOP);
+        assertEq(b.responseRef, keccak256("stop"));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).restrictions, T.RESTRICT_NO_NEW_RISK);
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).restrictions, T.RESTRICT_FULL_STOP);
+        // the adopter cannot resume (the record is an intervener's); the guardian, holding the resume right, reopens
+        // it, which lifts no stop of its own since the record carries the first intervener's suspension
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(id, bytes32(0));
+        vm.prank(guardian);
+        reg.resume(id, keccak256("reopened"));
+        assertEq(uint8(reg.bindingOf(id).state), uint8(T.BindingState.Active));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).restrictions, T.RESTRICT_FULL_STOP, "the guardian's stop stands");
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).restrictions, T.RESTRICT_NO_NEW_RISK, "so does the first intervener's");
+        // each intervener lifts its own stop through liftStop
+        vm.prank(guardian);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("closed"));
+        vm.prank(rando);
+        reg.liftStop(user, subjectAgent, address(specs), specId, rando, keccak256("closed"));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).bindingId, bytes32(0));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).bindingId, bytes32(0));
+    }
 }

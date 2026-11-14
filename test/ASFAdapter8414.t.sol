@@ -563,4 +563,44 @@ contract ASFAdapter8414Test is ASFBase {
         esc.judge(id2, sid2);
         assertEq(uint8(task.submissionOf(id2, sid2).status), uint8(ITaskTender.SubmissionStatus.Accepted));
     }
+
+    function test_N72_the_fulfiller_cannot_pre_empt_the_suspend_only_publisher_with_its_own_suspension() public {
+        ASFTaskTenderAdapter a = adapterRequiringPublisher();
+        bytes32 b = selfAdoptWithIntervener(worker, keccak256("w"), taskPublisher, T.RIGHT_SUSPEND);
+        uint256 id = task.mintTask(owner, taskPublisher, address(a), TD, TH, "ipfs://task-v1", terms(7 days));
+        vm.prank(funder);
+        task.fundTask{value: 2 ether}(id, 2 ether);
+        uint256 sid = submit(worker, id);
+        // the fulfiller suspends its own binding with de-risk only before the publisher acts: before revision 9
+        // the suspend-only publisher was locked out (suspend reverted with InvalidState, resume with NotAuthorized)
+        vm.prank(worker);
+        reg.suspend(b, T.RESTRICT_DERISK_ONLY, bytes32(0), keccak256("own"));
+        vm.prank(taskPublisher);
+        reg.suspend(b, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        T.Binding memory rec = reg.bindingOf(b);
+        assertEq(rec.suspendedBy, taskPublisher, "the record is the publisher's now");
+        assertEq(rec.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP);
+        // the fulfiller can no longer resume what it started; judgment rejects with the set in force, full stop included
+        vm.prank(worker);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.resume(b, bytes32(0));
+        (T.Verdict v, T.Reason[] memory reasons, uint8[] memory sets) = reg.check(a.requirementFor(worker), ids1(b));
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertReason(reasons[0], T.Reason.Suspended);
+        assertEq(sets[0], T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP);
+        a.judge(id, sid);
+        assertEq(uint8(task.submissionOf(id, sid).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+        // terminate-and-readopt does not escape the publisher's stop; the publisher lifts it and the fresh binding is admitted
+        vm.prank(worker);
+        reg.terminate(b, bytes32(0));
+        bytes32 fresh = selfAdoptWithIntervener(worker, keccak256("w-fresh"), taskPublisher, T.RIGHT_SUSPEND);
+        (T.Verdict v2, bytes32[] memory ids, T.Reason[] memory reasons2) = a.evaluate(worker);
+        assertVerdict(v2, T.Verdict.NotSatisfied);
+        assertEq(ids[0], fresh);
+        assertReason(reasons2[0], T.Reason.StoppedByIntervener);
+        vm.prank(taskPublisher);
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, keccak256("cleared"));
+        (T.Verdict v3,,) = a.evaluate(worker);
+        assertVerdict(v3, T.Verdict.Satisfied);
+    }
 }
