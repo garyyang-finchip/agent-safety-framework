@@ -1,0 +1,39 @@
+{
+  "asf": "1.0",
+  "kind": "requirement-set",
+  "name": "Tender admission: fulfillers hold their own Personal Assistant Safety v1 binding that the task publisher may suspend",
+  "combinator": "all",
+  "clauses": [
+    {
+      "role": "fulfiller",
+      "specification": {
+        "registry": "eip155:11155111:0x9cc8a10207f6b3e54241657cd040580939ddef5a",
+        "specId": "0xc2675934f7593f209b8963d08bcabc03726258dd086c0306a9eed0ab88d43bf6",
+        "name": "Personal Assistant Safety"
+      },
+      "versions": [
+        1
+      ],
+      "adopter": "self",
+      "subject": "self",
+      "scope": "any",
+      "enforcement": [
+        "account"
+      ],
+      "interveners": [
+        {
+          "ref": "eip155:11155111:0xf12afe29c9ec5f66f669d7e388e0bae7dc2f3ece",
+          "rights": [
+            "suspend",
+            "resume"
+          ],
+          "role": "task publisher"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "consumer": "ASFTaskTenderAdapter: adopter and subject are filled with the fulfiller at judgment time; the intervener requirement is kept, so that a suspension by the task publisher is not the fulfiller's own to lift and stands against the fulfiller for the subject and the specification through every binding the adapter scans and is the publisher's own to lift; the publisher holds the resume right so that it can also reopen the record it suspended",
+    "note": "specId is filled by tools/build-examples.js from the specification example"
+  }
+}

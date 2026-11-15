@@ -42,8 +42,9 @@ tools/                               build-examples.js, vectors.js, validate.js,
                                      test/ (node --test)
 script/SepoliaEvidence.s.sol         evidence run (deploy, publish, adopt, guard loop, tender loop, stop loop, lifecycle, set loop)
 scripts/make-filing-package.py       builds ercs-pr-package/ for the ethereum/ERCs pull request
-deployments/                         Sepolia records of the two runs: addresses and identifiers, the transactions,
-                                     the relinked examples (sepolia*, revision 5; sepolia-rev7*, revision 7)
+deployments/                         Sepolia records of the three runs: addresses and identifiers, the transactions,
+                                     the relinked examples (sepolia*, revision 5; sepolia-rev7*, revision 7;
+                                     sepolia-rev10*, revision 10)
 docs/                                design memo, Magicians post and revision notes, test record, Sepolia runbook
                                      and the two evidence records
 ```
@@ -81,9 +82,25 @@ The framework is designed to sit on top of existing and emerging agent standards
 
 ## Sepolia
 
-The evidence run (`script/SepoliaEvidence.s.sol`) has been executed on Sepolia twice, both times against the live TASK-KERNEL v3.0 `TaskToken`. The record of each run is in `deployments/` and `docs/`; the procedure in `docs/sepolia-runbook.md`. Revision 8 changed the evaluation (the response set in force carries the standing stops of the accounts a clause names, whatever reason is reported first) and added a seventh transaction phase that exercises it through the guarded account (the set loop); revisions 9 and 10 let an intervener's suspension widen an existing one and record its stop through a terminated record. None of these is deployed yet; a third run with the current contracts is prepared (rehearsed on Anvil, 59 transactions).
+The evidence run (`script/SepoliaEvidence.s.sol`) has been executed on Sepolia three times, each time against the live TASK-KERNEL v3.0 `TaskToken`. The record of each run is in `deployments/` and `docs/`; the procedure in `docs/sepolia-runbook.md`.
 
-The second run, on 2026-10-27 (blocks 12003345 to 12003478), deployed the revision-7 contracts (interface identifier `0xcff7f826`): it deployed both registries with their two linked libraries, published the two example specifications, created the example bindings (including the derived member binding), exercised the guarded-account loop (execute, the guardian suspends with its de-risk-only response and the registry records the guardian's standing stop, the de-risk call passes, new exposure reverts, the guardian's resume lifts its stop), the tender loop against the live `TaskToken` (the bound worker accepted and paid, the unbound submitter rejected), the standing-stop loop of Section 8.5 (the task publisher stops the worker's binding; the worker terminates it and adopts a fresh one, submits and is rejected with `StoppedByIntervener`; the publisher lifts its stop through `liftStop`; the worker submits again and is accepted and paid) and the lifecycle phase (the principal's full-stop response refuses even repayment, charter termination, the derived binding reporting `ParentNotSatisfied`, deprecation). 43 transactions, all successful; `docs/sepolia-evidence-rev7.md`, `deployments/sepolia-rev7.json`, `deployments/sepolia-rev7.transactions.json`.
+The third run, on 2026-11-15 (blocks 12140959 to 12140990), deployed the current contracts, revision 10 (interface identifier `0xcff7f826`). Besides the phases of the second run it exercised the set loop that revision 8 added: the guarded account's clause names the guardian as a required intervener; the guardian suspends the presented binding with its de-risk-only response and widens its standing stop to a full stop through a sibling binding with a response document that names the one it supersedes; repayment through the account is refused although the presented record shows de-risk only; the principal terminates the sibling, adopts a fresh binding, suspends it itself with de-risk only and presents it, and repayment is refused again because the guardian's full stop is in the response set in force; once the guardian lifts its stop, repayment passes under the principal's own suspension and borrowing does not, until the principal resumes. 58 transactions, all successful, 0.00464 ETH in fees; every application log equals the rehearsal mirror's; `docs/sepolia-evidence-rev10.md`, `deployments/sepolia-rev10.json`, `deployments/sepolia-rev10.transactions.json`.
+
+| Contract (revision 10) | Sepolia address |
+|---|---|
+| `ASFSpecificationRegistry` | `0x9cC8A10207F6B3E54241657cD040580939dDef5A` |
+| `ASFBindingRegistry` | `0x17D5A20094d5C97C53d921b101Fe8A9eE7c031D7` |
+| `ASFEvaluation` (library linked by the binding registry) | `0x7Dad89304047AC97814405921d140616f1708032` |
+| `ASFLifecycle` (library linked by the binding registry) | `0x00706AD939f32e8e40833658485b410Def0662Eb` |
+| `ASFGuardedAccount` | `0xb2E426d9b2A6f9A884ff9303288949267D76863D` |
+| `OperatorProbe` | `0xf4217a47323b5212172F308A4Be1B862b702bBd7` |
+| `LendingDesk` | `0xe8E77A1dD2b39B3f2C63e8f1528287d05758E9B2` |
+| `ASFTaskTenderAdapter` | `0x2b7662128D9bc8Bd59E4a1206C19EE71be9A8cFf` |
+| `TaskToken` (live TASK-KERNEL v3.0, consumed) | `0xA62059A498E40C4Ae4aF926E2B00C1Ff122bDdb7` |
+
+All eight deployed contracts are verified on Sourcify (runtime and creation match; solc 0.8.30, optimizer 200 runs, via IR). Specification identifiers: Personal Assistant Safety v1 `0xc2675934…3bf6`, Swarm Shared Funds v1 `0xc923ee99…14d9` (full values in `deployments/sepolia-rev10.json`).
+
+The second run, on 2026-10-27 (blocks 12003345 to 12003478), deployed the revision-7 contracts (interface identifier `0xcff7f826`): it deployed both registries with their two linked libraries, published the two example specifications, created the example bindings (including the derived member binding), exercised the guarded-account loop (execute, the guardian suspends with its de-risk-only response and the registry records the guardian's standing stop, the de-risk call passes, new exposure reverts, the guardian's resume lifts its stop), the tender loop against the live `TaskToken` (the bound worker accepted and paid, the unbound submitter rejected), the standing-stop loop of Section 8.5 (the task publisher stops the worker's binding; the worker terminates it and adopts a fresh one, submits and is rejected with `StoppedByIntervener`; the publisher lifts its stop through `liftStop`; the worker submits again and is accepted and paid) and the lifecycle phase (the principal's full-stop response refuses even repayment, charter termination, the derived binding reporting `ParentNotSatisfied`, deprecation). 43 transactions, all successful; `docs/sepolia-evidence-rev7.md`, `deployments/sepolia-rev7.json`, `deployments/sepolia-rev7.transactions.json`. Those contracts stay deployed as they were.
 
 | Contract (revision 7) | Sepolia address |
 |---|---|

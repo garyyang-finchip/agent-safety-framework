@@ -1,0 +1,9 @@
+{
+  "kind": "task-document",
+  "standard": "TASK-KERNEL v3.0 (token-bound task tender)",
+  "title": "ASF evidence task",
+  "description": "A tender used by the Agent Safety Framework evidence run. The acceptance authority is ASFTaskTenderAdapter: a submission is accepted only if the fulfiller holds its own Safety Binding to Personal Assistant Safety v1, account-enforced, naming the task publisher as an intervener with the suspend and resume rights.",
+  "deliverable": "Any submission; the judgment concerns the fulfiller's binding, not the content.",
+  "reward": "0.001 ETH per completion, two completions",
+  "judgmentWindow": "7 days"
+}

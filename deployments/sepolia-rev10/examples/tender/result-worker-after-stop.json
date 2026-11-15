@@ -1,0 +1,6 @@
+{
+  "kind": "fulfillment-result",
+  "task": "ASF evidence task",
+  "fulfiller": "the worker, after the publisher stopped its binding and it adopted a fresh one",
+  "summary": "Submission under a fresh binding while the publisher's stop stands against the worker; expected to be rejected with StoppedByIntervener."
+}
