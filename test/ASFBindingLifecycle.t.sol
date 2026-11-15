@@ -656,16 +656,24 @@ contract ASFBindingLifecycleTest is ASFBase {
         assertEq(b.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK);
         assertEq(b.responseRef, keccak256("stop"));
         assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).restrictions, T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK);
-        // a stranger still cannot suspend, a Terminated record still accepts nothing
+        // a stranger still cannot suspend; after termination the record never changes again (a later suspension by
+        // the guardian records into its stop only, N74)
         vm.prank(rando);
         vm.expectRevert(ASFErrors.NotAuthorized.selector);
         reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
         vm.prank(user);
         reg.terminate(id, keccak256("replaced"));
         vm.prank(guardian);
-        vm.expectRevert(ASFErrors.InvalidState.selector);
         reg.suspend(id, T.RESTRICT_SHRINK, bytes32(0), bytes32(0));
-        assertEq(reg.bindingOf(id).suspendedBy, guardian, "the terminated record shows who stopped it");
+        b = reg.bindingOf(id);
+        assertEq(uint8(b.state), uint8(T.BindingState.Terminated));
+        assertEq(b.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK, "the terminated record is unchanged");
+        assertEq(b.suspendedBy, guardian, "the terminated record shows who stopped it");
+        assertEq(
+            reg.stopOf(user, subjectAgent, address(specs), specId, guardian).restrictions,
+            T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK | T.RESTRICT_SHRINK,
+            "the guardian's stop widened through the terminated record"
+        );
 
         // with the resume right, the guardian recovers in one call too and its own resumption lifts its stop
         bytes32 id2 = adoptAs(user, withGuardian(input(keccak256("b2")), T.RIGHT_SUSPEND | T.RIGHT_RESUME));
@@ -696,14 +704,17 @@ contract ASFBindingLifecycleTest is ASFBase {
         vm.prank(rando);
         reg.suspend(id, T.RESTRICT_NO_NEW_RISK, keccak256("mild"), keccak256("first"));
         assertEq(reg.bindingOf(id).suspendedBy, rando);
-        // the guardian widens: the record keeps the first intervener, the set is the union, the document is the
-        // guardian's, and the guardian's stop is recorded separately from the first intervener's
+        // the guardian widens: the record keeps the first intervener and that intervener's document (a record's
+        // document is always its owner's), the set is the union, and the guardian's stop is recorded separately from
+        // the first intervener's, with the guardian's document
         vm.prank(guardian);
         reg.suspend(id, T.RESTRICT_FULL_STOP, keccak256("stop"), keccak256("escalation"));
         T.Binding memory b = reg.bindingOf(id);
         assertEq(b.suspendedBy, rando, "the record stays with the intervener that suspended it");
         assertEq(b.restrictions, T.RESTRICT_NO_NEW_RISK | T.RESTRICT_FULL_STOP);
-        assertEq(b.responseRef, keccak256("stop"));
+        assertEq(b.responseRef, keccak256("mild"), "the record keeps its owner's document");
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).responseRef, keccak256("stop"));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).responseRef, keccak256("mild"));
         assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).restrictions, T.RESTRICT_NO_NEW_RISK);
         assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).restrictions, T.RESTRICT_FULL_STOP);
         // the adopter cannot resume (the record is an intervener's); the guardian, holding the resume right, reopens
@@ -723,5 +734,127 @@ contract ASFBindingLifecycleTest is ASFBase {
         reg.liftStop(user, subjectAgent, address(specs), specId, rando, keccak256("closed"));
         assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).bindingId, bytes32(0));
         assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).bindingId, bytes32(0));
+    }
+
+    function test_N73_a_records_document_is_always_its_owners() public {
+        // the guardian (required) and an additional suspend-only intervener chosen by the adopter
+        T.Intervener[] memory two = new T.Intervener[](2);
+        two[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        two[1] = T.Intervener({account: rando, rights: T.RIGHT_SUSPEND});
+        T.BindingInput memory i = input(keccak256("b"));
+        i.interveners = two;
+        bytes32 id = adoptAs(user, i);
+        // the adopter suspends itself with de-risk only and its own document
+        vm.prank(user);
+        reg.suspend(id, T.RESTRICT_DERISK_ONLY, keccak256("own: unwinding allowed"), keccak256("maintenance"));
+        // the guardian's urgent full stop supplies no document yet: the record becomes the guardian's and carries no
+        // document; the adopter's document, which allowed unwinding, no longer describes the record
+        vm.prank(guardian);
+        vm.expectEmit(true, true, true, true);
+        emit IASFBindingRegistry.BindingStateChanged(
+            id, T.BindingState.Suspended, T.BindingState.Suspended, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP, bytes32(0), guardian, keccak256("urgent")
+        );
+        reg.suspend(id, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("urgent"));
+        T.Binding memory b = reg.bindingOf(id);
+        assertEq(b.suspendedBy, guardian);
+        assertEq(b.responseRef, bytes32(0), "the guardian has published no document yet");
+        // the guardian publishes its document with a further widening of its own record: the record takes it
+        vm.prank(guardian);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, keccak256("guardian: everything stops"), keccak256("document"));
+        assertEq(reg.bindingOf(id).responseRef, keccak256("guardian: everything stops"));
+        // the adopter's extra intervener widens with a milder document: the set widens, the record keeps the
+        // guardian's document, and the extra intervener's document is the document of its own stop
+        vm.prank(rando);
+        vm.expectEmit(true, true, true, true);
+        emit IASFBindingRegistry.BindingStateChanged(
+            id,
+            T.BindingState.Suspended,
+            T.BindingState.Suspended,
+            T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK | T.RESTRICT_ESSENTIAL_ONLY,
+            keccak256("guardian: everything stops"),
+            rando,
+            keccak256("extra")
+        );
+        reg.suspend(id, T.RESTRICT_ESSENTIAL_ONLY, keccak256("extra: repayments may continue"), keccak256("extra"));
+        b = reg.bindingOf(id);
+        assertEq(b.suspendedBy, guardian, "the record stays the guardian's");
+        assertEq(b.responseRef, keccak256("guardian: everything stops"), "and keeps the guardian's document");
+        assertEq(b.restrictions, T.RESTRICT_DERISK_ONLY | T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK | T.RESTRICT_ESSENTIAL_ONLY);
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, guardian).responseRef, keccak256("guardian: everything stops"));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).responseRef, keccak256("extra: repayments may continue"));
+        // the extra intervener can churn its own stop's document, never the record's
+        vm.prank(rando);
+        reg.suspend(id, T.RESTRICT_ESSENTIAL_ONLY, keccak256("extra: again"), keccak256("extra 2"));
+        assertEq(reg.bindingOf(id).responseRef, keccak256("guardian: everything stops"));
+        assertEq(reg.stopOf(user, subjectAgent, address(specs), specId, rando).responseRef, keccak256("extra: again"));
+    }
+
+    function test_N74_termination_does_not_block_an_interveners_stop() public {
+        // the adopter terminates its binding before the suspend-only guardian's suspension lands
+        bytes32 id = adoptAs(user, withGuardian(input(keccak256("b")), T.RIGHT_SUSPEND));
+        vm.prank(user);
+        reg.terminate(id, keccak256("ended"));
+        T.Binding memory before = reg.bindingOf(id);
+        vm.warp(START + 50);
+        // the guardian's suspension records its stop through the terminated record, which does not change
+        vm.prank(guardian);
+        vm.expectEmit(true, true, true, true);
+        emit IASFBindingRegistry.StopRecorded(user, subjectAgent, address(specs), specId, guardian, id, T.RESTRICT_FULL_STOP, keccak256("stop"));
+        vm.expectEmit(true, true, true, true);
+        emit IASFBindingRegistry.BindingStateChanged(
+            id, T.BindingState.Terminated, T.BindingState.Terminated, 0, bytes32(0), guardian, keccak256("report")
+        );
+        reg.suspend(id, T.RESTRICT_FULL_STOP, keccak256("stop"), keccak256("report"));
+        T.Binding memory afterB = reg.bindingOf(id);
+        assertEq(uint8(afterB.state), uint8(T.BindingState.Terminated));
+        assertEq(afterB.restrictions, before.restrictions);
+        assertEq(afterB.responseRef, before.responseRef);
+        assertEq(afterB.suspendedBy, before.suspendedBy);
+        assertEq(afterB.stateChangedAt, before.stateChangedAt, "the terminated record never changes");
+        T.Stop memory stop = reg.stopOf(user, subjectAgent, address(specs), specId, guardian);
+        assertEq(stop.bindingId, id);
+        assertEq(stop.restrictions, T.RESTRICT_FULL_STOP);
+        assertEq(stop.since, uint64(START + 50));
+        // a fresh binding of the adopter fails every clause naming the guardian
+        bytes32 fresh = adoptAs(user, withGuardian(input(keccak256("fresh")), T.RIGHT_SUSPEND));
+        T.Clause memory c = clause();
+        c.interveners = new T.Intervener[](1);
+        c.interveners[0] = T.Intervener({account: guardian, rights: T.RIGHT_SUSPEND});
+        (T.Verdict v, T.Reason r, uint8 set) = reg.checkBinding(fresh, c);
+        assertEq(uint8(v), uint8(T.Verdict.NotSatisfied));
+        assertEq(uint8(r), uint8(T.Reason.StoppedByIntervener));
+        assertEq(set, T.RESTRICT_FULL_STOP);
+        // the adopter cannot suspend its terminated record, a stranger cannot, nor an intervener without the
+        // suspend right; nobody resumes a terminated record
+        vm.prank(user);
+        vm.expectRevert(ASFErrors.InvalidState.selector);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, bytes32(0), bytes32(0));
+        vm.prank(rando);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, bytes32(0), bytes32(0));
+        vm.prank(guardian);
+        vm.expectRevert(ASFErrors.InvalidState.selector);
+        reg.resume(id, bytes32(0));
+        // a second suspension through the terminated record widens the stop; the guardian lifts it with liftStop
+        vm.prank(guardian);
+        reg.suspend(id, T.RESTRICT_NO_NEW_RISK, bytes32(0), keccak256("more"));
+        stop = reg.stopOf(user, subjectAgent, address(specs), specId, guardian);
+        assertEq(stop.restrictions, T.RESTRICT_FULL_STOP | T.RESTRICT_NO_NEW_RISK);
+        assertEq(stop.responseRef, keccak256("stop"), "a zero document keeps the stop's document");
+        assertEq(stop.since, uint64(START + 50));
+        vm.prank(guardian);
+        reg.liftStop(user, subjectAgent, address(specs), specId, guardian, keccak256("closed"));
+        (T.Verdict v2,,) = reg.checkBinding(fresh, c);
+        assertEq(uint8(v2), uint8(T.Verdict.Satisfied));
+        // an intervener holding only the terminate right cannot record a stop through it
+        T.BindingInput memory t = input(keccak256("t"));
+        t.interveners = new T.Intervener[](1);
+        t.interveners[0] = T.Intervener({account: rando, rights: T.RIGHT_TERMINATE});
+        bytes32 tid = adoptAs(user, t);
+        vm.prank(user);
+        reg.terminate(tid, bytes32(0));
+        vm.prank(rando);
+        vm.expectRevert(ASFErrors.NotAuthorized.selector);
+        reg.suspend(tid, T.RESTRICT_FULL_STOP, bytes32(0), bytes32(0));
     }
 }

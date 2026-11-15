@@ -603,4 +603,39 @@ contract ASFAdapter8414Test is ASFBase {
         (T.Verdict v3,,) = a.evaluate(worker);
         assertVerdict(v3, T.Verdict.Satisfied);
     }
+
+    function test_N75_terminating_before_the_publisher_acts_does_not_escape_its_stop() public {
+        ASFTaskTenderAdapter a = adapterRequiringPublisher();
+        bytes32 b = selfAdoptWithIntervener(worker, keccak256("w"), taskPublisher, T.RIGHT_SUSPEND);
+        uint256 id = task.mintTask(owner, taskPublisher, address(a), TD, TH, "ipfs://task-v1", terms(7 days));
+        vm.prank(funder);
+        task.fundTask{value: 2 ether}(id, 2 ether);
+        // the fulfiller sees the publisher's suspension coming and terminates its binding first
+        vm.prank(worker);
+        reg.terminate(b, keccak256("ended"));
+        // the publisher's suspension lands on the terminated record and records the publisher's stop through it
+        vm.prank(taskPublisher);
+        reg.suspend(b, T.RESTRICT_FULL_STOP, bytes32(0), keccak256("report"));
+        assertEq(uint8(reg.bindingOf(b).state), uint8(T.BindingState.Terminated));
+        T.Stop memory stop = reg.stopOf(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher);
+        assertEq(stop.bindingId, b);
+        // the fulfiller adopts afresh, submits and calls judge itself in one sequence: rejected, the stop stands
+        bytes32 fresh = selfAdoptWithIntervener(worker, keccak256("w-fresh"), taskPublisher, T.RIGHT_SUSPEND);
+        uint256 sid = submit(worker, id);
+        (T.Verdict v, bytes32[] memory ids, T.Reason[] memory reasons) = a.evaluate(worker);
+        assertVerdict(v, T.Verdict.NotSatisfied);
+        assertEq(ids[0], fresh);
+        assertReason(reasons[0], T.Reason.StoppedByIntervener);
+        vm.prank(worker);
+        a.judge(id, sid);
+        assertEq(uint8(task.submissionOf(id, sid).status), uint8(ITaskTender.SubmissionStatus.Rejected));
+        // the publisher lifts its stop and the fresh binding is admitted and paid
+        vm.prank(taskPublisher);
+        reg.liftStop(worker, ASFKeys.accountSubjectKey(worker), address(specs), specId, taskPublisher, keccak256("cleared"));
+        uint256 sid2 = submit(worker, id);
+        uint256 before = worker.balance;
+        a.judge(id, sid2);
+        assertEq(uint8(task.submissionOf(id, sid2).status), uint8(ITaskTender.SubmissionStatus.Accepted));
+        assertGt(worker.balance, before);
+    }
 }
